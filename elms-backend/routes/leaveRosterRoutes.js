@@ -1,19 +1,19 @@
-// In routes/leaveRosterRoutes.js (create this file)
 const express = require("express");
 const router = express.Router();
 const LeaveRoster = require("../models/LeaveRoster");
 const ShortLeave = require("../models/ShortLeave");
 const AnnualLeave = require("../models/AnnualLeave");
 const Profile = require("../models/Profile");
-const { verifyToken, hasRole } = require("../middleware/authMiddleware");
 const User = require("../models/User");
+const { verifyToken, hasRole } = require("../middleware/authMiddleware");
+
 const countWorkingDays = (startDate, endDate) => {
   let count = 0;
   let currentDate = new Date(startDate);
 
   while (currentDate <= endDate) {
     const dayOfWeek = currentDate.getDay();
-    if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Exclude Sunday (0) and Saturday (6)
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
       count++;
     }
     currentDate.setDate(currentDate.getDate() + 1);
@@ -23,33 +23,29 @@ const countWorkingDays = (startDate, endDate) => {
 };
 
 // Get leave roster for an employee
-router.get("/:employeeId", verifyToken, hasRole(["Employee",  "Admin", "Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector"]), async (req, res) => {
+router.get("/:employeeId", verifyToken, async (req, res) => {
   try {
     const { employeeId } = req.params;
     const year = new Date().getFullYear();
-    console.log('Fetching roster for employeeId:', employeeId);
 
+    if (req.user.id !== employeeId && !["Admin", "Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector"].includes(req.user.role)) {
+      return res.status(403).json({ error: "Not authorized to view this roster" });
+    }
 
     let roster = await LeaveRoster.findOne({ employeeId, year }).populate("employeeId", "name department");
     if (!roster) {
       const employee = await User.findById(employeeId);
-      console.log('User found:', employee);
       if (!employee) {
-        return res.status(404).json({ error: 'Employee not found' });
+        return res.status(404).json({ error: "Employee not found" });
       }
 
-      // Check Profile for department if not in User
       let department = employee.department;
-      console.log('User department:', department);
       if (!department) {
         const profile = await Profile.findOne({ userId: employeeId });
-        console.log('Profile found:', profile);
         if (!profile || !profile.department) {
-          console.log('Profile or department missing for employeeId:', employeeId);
-          return res.status(400).json({ error: 'Employee department is required but not set' });
+          return res.status(400).json({ error: "Employee department is required but not set" });
         }
         department = profile.department;
-        console.log('Using department from Profile:', department);
       }
 
       roster = new LeaveRoster({ 
@@ -59,7 +55,6 @@ router.get("/:employeeId", verifyToken, hasRole(["Employee",  "Admin", "Supervis
         periods: [] 
       });
       await roster.save();
-      console.log('Created new roster:', roster);
     }
     res.status(200).json(roster);
   } catch (error) {
@@ -68,9 +63,28 @@ router.get("/:employeeId", verifyToken, hasRole(["Employee",  "Admin", "Supervis
   }
 });
 
+// Get leave rosters for all employees in the same sector
+router.get("/sector/:sector", verifyToken, async (req, res) => {
+  try {
+    const { sector } = req.params;
+    const year = new Date().getFullYear();
 
+    const profiles = await Profile.find({ sector });
+    const employeeIds = profiles.map(profile => profile.userId);
 
-// Suggest/Edit leave period (Employee)
+    const rosters = await LeaveRoster.find({ 
+      employeeId: { $in: employeeIds }, 
+      year 
+    }).populate("employeeId", "name department");
+
+    res.status(200).json(rosters);
+  } catch (error) {
+    console.error("Error fetching leave rosters for sector:", error);
+    res.status(500).json({ error: "Server error", details: error.message });
+  }
+});
+
+// Suggest/Edit leave period
 router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
   try {
     const { employeeId } = req.params;
@@ -89,7 +103,7 @@ router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
     if (start > end) {
       return res.status(400).json({ error: "startDate cannot be later than endDate" });
     }
-     const validLeaveTypes = [
+    const validLeaveTypes = [
       "Short Leave", "Annual Leave", "Emergency Leave", "Maternity Leave",
       "Terminal", "Compassionate", "Sports", "Unpaid"
     ];
@@ -97,20 +111,20 @@ router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
       return res.status(400).json({ error: `leaveType must be one of: ${validLeaveTypes.join(", ")}` });
     }
     
-    if (req.user.id !== employeeId.toString() && !["Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector", "Admin"].includes(req.user.role)) {
+    if (req.user.id !== employeeId && !["Supervisor", "HRDirector", "Admin"].includes(req.user.role)) {
       return res.status(403).json({ error: "Not authorized to suggest leave for this employee" });
     }
 
     let roster = await LeaveRoster.findOne({ employeeId, year }).populate("employeeId", "department");
     if (!roster) {
       const employee = await User.findById(employeeId);
-      if (!employee) return res.status(404).json({ error: 'Employee not found' });
+      if (!employee) return res.status(404).json({ error: "Employee not found" });
 
       let department = employee.department;
       if (!department) {
         const profile = await Profile.findOne({ userId: employeeId });
         if (!profile || !profile.department) {
-          return res.status(400).json({ error: 'Employee department is required but not set' });
+          return res.status(400).json({ error: "Employee department is required but not set" });
         }
         department = profile.department;
       }
@@ -122,13 +136,17 @@ router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
         periods: [] 
       });
     }
-    // Check for overlapping leaves in the same department
+
     const departmentLeaves = await LeaveRoster.find({
       department: roster.department,
       employeeId: { $ne: employeeId },
-      "periods.startDate": { $lte: new Date(endDate) },
-      "periods.endDate": { $gte: new Date(startDate) },
-      "periods.status": "Confirmed",
+      periods: {
+        $elemMatch: {
+          startDate: { $lte: new Date(endDate) },
+          endDate: { $gte: new Date(startDate) },
+          status: "Confirmed",
+        },
+      },
     });
 
     if (departmentLeaves.length > 0) {
@@ -144,6 +162,19 @@ router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
     });
 
     await roster.save();
+
+    const io = req.app.get("io");
+    if (io) {
+      const profile = await Profile.findOne({ userId: employeeId });
+      if (profile && profile.sector) {
+        io.to(`sector:${profile.sector}`).emit("rosterUpdate", { employeeId, sector: profile.sector });
+      } else {
+        io.emit("rosterUpdate", { employeeId });
+      }
+    } else {
+      console.warn("Socket.io not initialized; cannot emit rosterUpdate event");
+    }
+
     res.status(200).json({ message: "Leave period suggested", roster });
   } catch (error) {
     console.error("Error suggesting leave period:", error);
@@ -151,11 +182,15 @@ router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
   }
 });
 
-// Confirm/Reject leave period (Supervisor/HRDirector)
+// Confirm/Reject leave period
 router.patch("/update-period/:rosterId/:periodId", verifyToken, hasRole(["Supervisor", "HRDirector", "Admin"]), async (req, res) => {
   try {
     const { rosterId, periodId } = req.params;
-    const { status } = req.body; // "Confirmed" or "Rejected"
+    const { status } = req.body;
+
+    if (!["Confirmed", "Rejected"].includes(status)) {
+      return res.status(400).json({ error: "Status must be 'Confirmed' or 'Rejected'" });
+    }
 
     const roster = await LeaveRoster.findById(rosterId);
     if (!roster) return res.status(404).json({ error: "Roster not found" });
@@ -167,11 +202,16 @@ router.patch("/update-period/:rosterId/:periodId", verifyToken, hasRole(["Superv
     await roster.save();
 
     const io = req.app.get("io");
-if (io) {
-  io.emit("rosterUpdate", { employeeId: roster.employeeId, periodId, status });
-} else {
-  console.warn("Socket.io not initialized; cannot emit rosterUpdate event");
-}
+    if (io) {
+      const profile = await Profile.findOne({ userId: roster.employeeId });
+      if (profile && profile.sector) {
+        io.to(`sector:${profile.sector}`).emit("rosterUpdate", { employeeId: roster.employeeId, periodId, status, sector: profile.sector });
+      } else {
+        io.emit("rosterUpdate", { employeeId: roster.employeeId, periodId, status });
+      }
+    } else {
+      console.warn("Socket.io not initialized; cannot emit rosterUpdate event");
+    }
 
     res.status(200).json({ message: "Leave period updated", roster });
   } catch (error) {
@@ -196,7 +236,7 @@ router.post("/apply-from-roster/:rosterId/:periodId", verifyToken, async (req, r
       return res.status(400).json({ error: "Leave period not found or not confirmed" });
     }
 
-     const { leaveType, startDate, endDate } = period;
+    const { leaveType, startDate, endDate } = period;
     let leave;
     if (["Short Leave", "Emergency Leave", "Compassionate", "Sports"].includes(leaveType)) {
       leave = new ShortLeave({
@@ -228,7 +268,7 @@ router.post("/apply-from-roster/:rosterId/:periodId", verifyToken, async (req, r
           { approverRole: "Departmental Head", status: "Pending" },
           { approverRole: "HR Director", status: "Pending" },
         ],
-     });
+      });
     } else {
       return res.status(400).json({ error: "Unsupported leave type" });
     }
@@ -236,15 +276,19 @@ router.post("/apply-from-roster/:rosterId/:periodId", verifyToken, async (req, r
     await leave.save();
 
     const io = req.app.get("io");
-if (io) {
-  io.emit("newLeaveRequest", {
-    leaveType: leave.leaveType,
-    employeeName: leave.employeeName,
-    id: leave._id,
-  });
-} else {
-  console.warn("Socket.io not initialized; cannot emit newLeaveRequest event");
-}
+    if (io) {
+      io.emit("newLeaveRequest", {
+        leaveType: leave.leaveType,
+        employeeName: leave.employeeName,
+        id: leave._id,
+      });
+      const profile = await Profile.findOne({ userId: roster.employeeId });
+      if (profile && profile.sector) {
+        io.to(`sector:${profile.sector}`).emit("rosterUpdate", { employeeId: roster.employeeId, sector: profile.sector });
+      }
+    } else {
+      console.warn("Socket.io not initialized; cannot emit newLeaveRequest event");
+    }
 
     res.status(201).json({ message: "Leave applied successfully", leave });
   } catch (error) {
