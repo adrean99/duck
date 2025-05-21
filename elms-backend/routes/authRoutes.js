@@ -1,6 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
+const Profile = require("../models/Profile");
 const { verifyToken, isAdmin, isSectionalHead, isDepartmentalHead, isHRDirector } = require("../middleware/authMiddleware");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
@@ -82,11 +83,19 @@ router.post("/login", async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
-
+   
+    let sector = user.sector;
+    if (!sector) {
+      const profile = await Profile.findOne({ userId: user._id });
+      sector = profile ? profile.sector : null;
+      if (!sector) {
+        return res.status(400).json({ error: 'User sector is not defined in profile. Please update your profile.' });
+      }
+    }
     // Generate JWT Token
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ id: user._id, role: user.role, sector }, process.env.JWT_SECRET, { expiresIn: "1h" });
 
-    res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, sector, } });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Server error" });

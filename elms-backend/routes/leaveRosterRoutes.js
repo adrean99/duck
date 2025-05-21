@@ -23,7 +23,7 @@ const countWorkingDays = (startDate, endDate) => {
 };
 
 // Get leave roster for an employee
-router.get("/:employeeId", verifyToken, hasRole(["Employee", "Supervisor", "HRDirector", "Admin"]), async (req, res) => {
+router.get("/:employeeId", verifyToken, hasRole(["Employee",  "Admin", "Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector"]), async (req, res) => {
   try {
     const { employeeId } = req.params;
     const year = new Date().getFullYear();
@@ -68,6 +68,8 @@ router.get("/:employeeId", verifyToken, hasRole(["Employee", "Supervisor", "HRDi
   }
 });
 
+
+
 // Suggest/Edit leave period (Employee)
 router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
   try {
@@ -87,12 +89,15 @@ router.post("/suggest/:employeeId", verifyToken, async (req, res) => {
     if (start > end) {
       return res.status(400).json({ error: "startDate cannot be later than endDate" });
     }
-    const validLeaveTypes = ["Short Leave", "Annual Leave", "Emergency Leave", "Maternity Leave"];
+     const validLeaveTypes = [
+      "Short Leave", "Annual Leave", "Emergency Leave", "Maternity Leave",
+      "Terminal", "Compassionate", "Sports", "Unpaid"
+    ];
     if (!validLeaveTypes.includes(leaveType)) {
       return res.status(400).json({ error: `leaveType must be one of: ${validLeaveTypes.join(", ")}` });
     }
     
-    if (req.user.id !== employeeId.toString() && !["Supervisor", "HRDirector", "Admin"].includes(req.user.role)) {
+    if (req.user.id !== employeeId.toString() && !["Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector", "Admin"].includes(req.user.role)) {
       return res.status(403).json({ error: "Not authorized to suggest leave for this employee" });
     }
 
@@ -191,70 +196,41 @@ router.post("/apply-from-roster/:rosterId/:periodId", verifyToken, async (req, r
       return res.status(400).json({ error: "Leave period not found or not confirmed" });
     }
 
-    const { leaveType, startDate, endDate } = period;
+     const { leaveType, startDate, endDate } = period;
     let leave;
-    if (leaveType === "Short Leave") {
+    if (["Short Leave", "Emergency Leave", "Compassionate", "Sports"].includes(leaveType)) {
       leave = new ShortLeave({
         employeeId: roster.employeeId._id,
-        leaveType: "Short Leave",
+        leaveType,
         employeeName: roster.employeeId.name,
         personNumber: "N/A",
         department: roster.department,
         daysApplied: countWorkingDays(new Date(startDate), new Date(endDate)),
         startDate,
         endDate,
-        reason: "Applied from roster",
+        reason: `${leaveType} applied from roster`,
         status: "Pending",
       });
-    } else if (leaveType === "Annual Leave") {
+    } else if (["Annual Leave", "Maternity Leave", "Terminal", "Unpaid"].includes(leaveType)) {
       leave = new AnnualLeave({
         employeeId: roster.employeeId._id,
-        leaveType: "Annual Leave",
+        leaveType,
         employeeName: roster.employeeId.name,
         personNumber: "N/A",
         department: roster.department,
         daysApplied: countWorkingDays(new Date(startDate), new Date(endDate)),
         startDate,
         endDate,
-        reason: "Applied from roster",
+        reason: `${leaveType} applied from roster`,
         status: "Pending",
         approvals: [
           { approverRole: "Sectional Head", status: "Pending" },
           { approverRole: "Departmental Head", status: "Pending" },
           { approverRole: "HR Director", status: "Pending" },
         ],
-      });
-    } else if (leaveType === "Emergency Leave") {
-      leave = new ShortLeave({
-        employeeId: roster.employeeId._id,
-        leaveType: "Emergency Leave",
-        employeeName: roster.employeeId.name,
-        personNumber: "N/A",
-        department: roster.department,
-        daysApplied: countWorkingDays(new Date(startDate), new Date(endDate)),
-        startDate,
-        endDate,
-        reason: "Emergency leave applied from roster",
-        status: "Pending",
-      });
-    } else if (leaveType === "Maternity Leave") {
-      leave = new AnnualLeave({
-        employeeId: roster.employeeId._id,
-        leaveType: "Maternity Leave",
-        employeeName: roster.employeeId.name,
-        personNumber: "N/A",
-        department: roster.department,
-        daysApplied: countWorkingDays(new Date(startDate), new Date(endDate)),
-        startDate,
-        endDate,
-        reason: "Maternity leave applied from roster",
-        status: "Pending",
-        approvals: [
-          { approverRole: "Sectional Head", status: "Pending" },
-          { approverRole: "Departmental Head", status: "Pending" },
-          { approverRole: "HR Director", status: "Pending" },
-        ],
-      });
+     });
+    } else {
+      return res.status(400).json({ error: "Unsupported leave type" });
     }
 
     await leave.save();

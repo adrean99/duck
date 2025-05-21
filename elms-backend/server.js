@@ -6,6 +6,8 @@ const http = require("http");
 const { Server } = require("socket.io");
 const path = require("path");
 const jwt = require("jsonwebtoken");
+const multer = require('multer');
+//const { verifyToken } = require("./middleware/authMiddleware");
 
 const app = express(); // ✅ Define `app` before using it
 const server = http.createServer(app); // ✅ Now `app` is available
@@ -27,11 +29,11 @@ const io = new Server(server, {
 
 
 
+
+
 app.get('/api/leaves', (req, res) => {
   res.json({ message: 'Leave requests', data: [] });
 });
-
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Import routes
 const leaveRoutes = require("./routes/leaveRoutes");
@@ -40,7 +42,9 @@ const profileRoutes = require("./routes/profileRoutes");
 const leaveBalanceRoutes = require("./routes/leaveBalanceRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const userRoutes = require("./routes/userRoutes");
+const auditLogsRoutes = require("./routes/auditLogsRoutes");
 const leaveRosterRoutes = require("./routes/leaveRosterRoutes");
+
 
 // Use routes
 app.use("/api/leave-roster", leaveRosterRoutes);
@@ -51,6 +55,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/leave-balances", leaveBalanceRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/audit-logs", auditLogsRoutes);
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+//app.use(verifyToken);
 
 // WebSocket logic
 io.use((socket, next) => {

@@ -3,6 +3,7 @@ import { AuthContext } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import apiClient from "../utils/apiClient";
 import { useNavigate } from "react-router-dom";
+import { useMemo } from "react";
 import {
   Paper,
   Typography,
@@ -32,8 +33,25 @@ import {
   Avatar,
   CircularProgress,
   Input,
+  Checkbox,
+  Menu,
+  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Collapse,
+  Select,
+  FormControl,
+  InputLabel,
+  Pagination,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import DownloadIcon from "@mui/icons-material/Download";
+import HistoryIcon from "@mui/icons-material/History";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import PersonIcon from "@mui/icons-material/Person";
@@ -47,8 +65,9 @@ import { Calendar, dateFnsLocalizer } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { io } from "socket.io-client";
+import { ProfileTable } from "./Profile";
 import LeaveRoster from "../components/LeaveRoster";
-
+import { CSVLink } from "react-csv";
 // Date-fns setup for react-big-calendar
 const locales = {
   "en-US": require("date-fns/locale/en-US"),
@@ -82,33 +101,6 @@ const validatePhoneNumber = (phoneNumber) => {
   return phoneRegex.test(phoneNumber);
 };
 
-// Role-based filtering function
-const filterLeavesByPendingActions = (leaves, isShortLeave, userRole, showPendingActionsOnly) => {
-  if (!showPendingActionsOnly) return leaves;
-
-  return leaves.filter((leave) => {
-    if (userRole === "Supervisor" && isShortLeave) {
-      return leave.status === "Pending";
-    } else if (userRole === "SectionalHead" && !isShortLeave) {
-      return leave.status === "Pending";
-    } else if (userRole === "DepartmentalHead" && !isShortLeave) {
-      return leave.status === "RecommendedBySectional";
-    } else if (userRole === "HRDirector") {
-      return isShortLeave
-        ? leave.status === "RecommendedBySectional"
-        : leave.status === "RecommendedByDepartmental";
-    } else if (userRole === "Admin") {
-      return (
-        leave.status === "Pending" ||
-        (isShortLeave && leave.status === "RecommendedBySectional") ||
-        (!isShortLeave &&
-          (leave.status === "RecommendedBySectional" ||
-            leave.status === "RecommendedByDepartmental"))
-      );
-    }
-    return false;
-  });
-};
 
 // Styled components for custom styling
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
@@ -128,11 +120,13 @@ const StyledDrawer = styled(Drawer)(({ theme }) => ({
   },
 }));
 
-const StyledButton = styled(Button)(({ theme }) => ({
-  borderRadius: 6,
+const StyledButton = styled(Button) ({
+borderRadius: 6,
   textTransform: "none",
   padding: "8px 16px",
-}));
+  transition: "all 0.3s ease",
+  "&:hover": { transform: "translateY(-2px)", boxShadow: "0 4px 8px rgba(0,0,0,0.1)" },
+});
 
 const StyledStatsCard = styled(Paper)(({ theme }) => ({
   p: 3,
@@ -159,6 +153,50 @@ const modalStyle = {
   overflowY: "auto",
 };
 
+
+// Helper functions
+const getRowBackgroundColor = (leave) => {
+  switch (leave.status) {
+    case "Approved": return "#e8f5e9";
+    case "Rejected": return "#ffebee";
+    case "Pending": return "#fff3e0";
+    default: return "transparent";
+  }
+};
+
+const filterLeavesByPendingActions = (leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter) => {
+  let filteredLeaves = leaves;
+  if (showPendingActionsOnly) {
+    filteredLeaves = leaves.filter((leave) => {
+      if (userRole === "Supervisor" && isShortLeave) return leave.status === "Pending";
+      if (userRole === "SectionalHead" && !isShortLeave) return leave.status === "Pending";
+      if (userRole === "DepartmentalHead" && !isShortLeave) return leave.status === "RecommendedBySectional";
+      if (userRole === "HRDirector") {
+        return isShortLeave
+          ? leave.status === "RecommendedBySectional"
+          : leave.status === "RecommendedByDepartmental";
+      }
+      if (userRole === "Admin") return true;
+      return false;
+    });
+  }
+  if (specificRoleFilter && specificRoleFilter !== "All") {
+    filteredLeaves = filteredLeaves.filter((leave) => {
+      if (specificRoleFilter === "Supervisor" && isShortLeave) return leave.status === "Pending";
+      if (specificRoleFilter === "SectionalHead" && !isShortLeave) return leave.status === "Pending";
+      if (specificRoleFilter === "DepartmentalHead" && !isShortLeave) return leave.status === "RecommendedBySectional";
+      if (specificRoleFilter === "HRDirector") {
+        return isShortLeave
+          ? leave.status === "RecommendedBySectional"
+          : leave.status === "RecommendedByDepartmental";
+      }
+      return true;
+    });
+  }
+  return filteredLeaves;
+};
+
+
 const MainContent = styled(Box)(({ theme }) => ({
   marginTop: 64,
   height: "calc(100vh - 64px)",
@@ -166,6 +204,568 @@ const MainContent = styled(Box)(({ theme }) => ({
   overflow: "auto",
   background: "linear-gradient(135deg, #f5f7fa 0%, #e4e9f0 100%)",
 }));
+/*  
+const ProfileForm = ({
+  profile,
+  isEditingProfile,
+  setIsEditingProfile,
+  formData,
+  formErrors,
+  handleInputChange,
+  handleProfileUpdate,
+}) => {
+ return (
+            <>
+              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
+                Admin Profile
+              </Typography>
+              <Divider sx={{ mb: 3 }} />
+              {isEditingProfile ? (
+                <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Name"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        fullWidth
+                        error={!!formErrors.name}
+                        helperText={formErrors.name}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        fullWidth
+                        error={!!formErrors.email}
+                        helperText={formErrors.email}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Department"
+                        name="department"
+                        value={formData.department}
+                        onChange={handleInputChange}
+                        fullWidth
+                        error={!!formErrors.department}
+                        helperText={formErrors.department}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Phone Number"
+                        name="phoneNumber"
+                        value={formData.phoneNumber}
+                        onChange={handleInputChange}
+                        fullWidth
+                        error={!!formErrors.phoneNumber}
+                        helperText={formErrors.phoneNumber}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Input
+                        type="file"
+                        name="profilePicture"
+                        onChange={handleInputChange}
+                        fullWidth
+                        inputProps={{ accept: "image/*" }}
+                      />
+                      {formData.profilePicture && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          Selected file: {formData.profilePicture.name}
+                        </Typography>
+                      )}
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Chief Officer Name"
+                        name="chiefOfficerName"
+                        value={formData.chiefOfficerName}
+                        onChange={handleInputChange}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Supervisor Name"
+                        name="supervisorName"
+                        value={formData.supervisorName}
+                        onChange={handleInputChange}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Person Number"
+                        name="personNumber"
+                        value={formData.personNumber}
+                        onChange={handleInputChange}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Sector"
+                        name="sector"
+                        value={formData.sector}
+                        onChange={handleInputChange}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Sectional Head Name"
+                        name="sectionalHeadName"
+                        value={formData.sectionalHeadName}
+                        onChange={handleInputChange}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Departmental Head Name"
+                        name="departmentalHeadName"
+                        value={formData.departmentalHeadName}
+                        onChange={handleInputChange}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="HR Director Name"
+                        name="HRDirectorName"
+                        value={formData.HRDirectorName}
+                        onChange={handleInputChange}
+                        fullWidth
+                      />
+                    </Grid>
+                  </Grid>
+                  <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+                    <StyledButton variant="contained" color="primary" onClick={handleProfileUpdate}>
+                      Save
+                    </StyledButton>
+                    <StyledButton
+                      variant="outlined"
+                      color="secondary"
+                      onClick={() => setIsEditingProfile(false)}
+                    >
+                      Cancel
+                    </StyledButton>
+                  </Box>
+                </Box>
+              ) : (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
+                    <Avatar
+                      src={profile?.profilePicture || ""}
+                      alt={profile?.name || "Admin"}
+                      sx={{ width: 80, height: 80 }}
+                    />
+                    <Typography variant="h6">{profile?.name || "N/A"}</Typography>
+                  </Box>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Email:</strong> {profile?.email || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Department:</strong> {profile?.department || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Phone Number:</strong> {profile?.phoneNumber || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Chief Officer:</strong> {profile?.chiefOfficerName || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Supervisor:</strong> {profile?.supervisorName || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Person Number:</strong> {profile?.personNumber || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Sector:</strong> {profile?.sector || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Sectional Head:</strong> {profile?.sectionalHeadName || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>Departmental Head:</strong> {profile?.departmentalHeadName || "N/A"}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1" sx={{ color: "#555" }}>
+                        <strong>HR Director:</strong> {profile?.HRDirectorName || "N/A"}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                  <StyledButton
+                    variant="contained"
+                    color="primary"
+                    onClick={() => setIsEditingProfile(true)}
+                    sx={{ mt: 3, width: "fit-content" }}
+                  >
+                    Edit Profile
+                  </StyledButton>
+                </Box>
+              )}
+            </>
+  );
+          }; 
+*/
+const LeaveCalendar = ({
+  calendarError,
+  isFetchingEvents,
+  fetchLeaveEvents,
+  events,
+  setSelectedEvent,
+  
+}) => {
+  return (
+            <>
+              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
+                Leave Calendar
+              </Typography>
+              <Divider sx={{ mb: 3 }} />
+              
+              {calendarError ? (
+                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                  <Typography variant="body1" sx={{ color: "#f44336" }}>
+                    {calendarError}
+                  </Typography>
+                  <StyledButton
+                    variant="contained"
+                    color="primary"
+                    onClick={fetchLeaveEvents}
+                    disabled={isFetchingEvents}
+                  >
+                    {isFetchingEvents ? <CircularProgress size={24} /> : "Retry"}
+                  </StyledButton>
+                </Box>
+              ) : (
+                <Box sx={{ height: "calc(100% - 80px)" }}>
+                  <Calendar
+                    localizer={localizer}
+                    events={events}
+                    startAccessor="start"
+                    endAccessor="end"
+                    style={{ height: "100%", width: "100%" }}
+                    onSelectEvent={(event) => setSelectedEvent(event)}
+                    eventPropGetter={(event) => ({
+                      style: event.style,
+                    })}
+                  />
+                </Box>
+              )}
+            </>
+          );
+        };
+
+
+
+const LeaveTable = ({
+  leaves,
+  isShortLeave,
+  userRole,
+  showPendingActionsOnly,
+  setShowPendingActionsOnly,
+  handleAction,
+  handleViewDetails,
+  selectedLeaves,
+  setSelectedLeaves,
+  handleBulkAction,
+  specificRoleFilter,
+  setSpecificRoleFilter,
+  filterParams,
+  setFilterParams,
+  sortColumn,
+  sortDirection,
+  handleSort,
+  currentPage,
+  setCurrentPage,
+  rowsPerPage,
+  isActiveLeave,
+  getStatusChip,
+  handleEditClick,
+  handleDeleteClick,
+}) => {
+  const [showFilters, setShowFilters] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [contextLeave, setContextLeave] = useState(null);
+
+  const filteredLeaves = useMemo(() => {
+    return filterLeavesByPendingActions(leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter).filter(
+      (leave) =>
+        (!filterParams.status || leave.status === filterParams.status) &&
+        (!filterParams.startDate || new Date(leave.startDate) >= new Date(filterParams.startDate)) &&
+        (!filterParams.endDate || new Date(leave.endDate) <= new Date(filterParams.endDate)) &&
+        (!filterParams.employeeName ||
+          leave.employeeName.toLowerCase().includes(filterParams.employeeName.toLowerCase()))
+    );
+  }, [leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter, filterParams]);
+
+  const sortedLeaves = useMemo(() => {
+    return [...filteredLeaves].sort((a, b) => {
+      let valueA = sortColumn === "startDate" ? new Date(a.startDate) : a[sortColumn];
+      let valueB = sortColumn === "startDate" ? new Date(b.startDate) : b[sortColumn];
+      if (sortColumn === "employeeName") {
+        valueA = valueA.toLowerCase();
+        valueB = valueB.toLowerCase();
+      }
+      if (valueA < valueB) return sortDirection === "asc" ? -1 : 1;
+      if (valueA > valueB) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [filteredLeaves, sortColumn, sortDirection]);
+
+  const paginatedLeaves = useMemo(() => {
+    return sortedLeaves.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  }, [sortedLeaves, currentPage, rowsPerPage]);
+
+  const handleMenuOpen = (event, leave) => {
+    setAnchorEl(event.currentTarget);
+    setContextLeave(leave);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setContextLeave(null);
+  };
+
+  return (
+    <>
+      <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
+        {isShortLeave ? "Short Leave Requests" : "Annual Leave Requests"}
+      </Typography>
+      <Box sx={{ mb: 2, display: "flex", gap: 2, alignItems: "center" }}>
+        <StyledButton
+          variant={showPendingActionsOnly ? "contained" : "outlined"}
+          color="primary"
+          onClick={() => setShowPendingActionsOnly(!showPendingActionsOnly)}
+        >
+          {showPendingActionsOnly ? "Show All" : "Show Pending Only"}
+        </StyledButton>
+        {userRole === "Admin" && (
+          <FormControl sx={{ minWidth: 120 }}>
+            <InputLabel>Filter Role</InputLabel>
+            <Select
+              value={specificRoleFilter}
+              onChange={(e) => setSpecificRoleFilter(e.target.value)}
+              label="Filter Role"
+            >
+              <MenuItem value="All">All Roles</MenuItem>
+              <MenuItem value="Supervisor">Supervisor</MenuItem>
+              <MenuItem value="SectionalHead">Sectional Head</MenuItem>
+              <MenuItem value="DepartmentalHead">Departmental Head</MenuItem>
+              <MenuItem value="HRDirector">HR Director</MenuItem>
+            </Select>
+          </FormControl>
+        )}
+        <StyledButton
+          variant="outlined"
+          onClick={() => setShowFilters(!showFilters)}
+          startIcon={showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        >
+          {showFilters ? "Hide Filters" : "Show Filters"}
+        </StyledButton>
+        <CSVLink
+          data={sortedLeaves.map((leave) => ({
+            ID: leave._id.slice(-6),
+            Employee: leave.employeeName,
+            Days: leave.daysApplied,
+            StartDate: new Date(leave.startDate).toLocaleDateString(),
+            Status: leave.status || "Pending",
+          }))}
+          filename={`${isShortLeave ? "short" : "annual"}-leaves.csv`}
+        >
+          <StyledButton variant="outlined" startIcon={<DownloadIcon />}>Export to CSV</StyledButton>
+        </CSVLink>
+      </Box>
+
+      <Collapse in={showFilters}>
+        <Box sx={{ mb: 3, p: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={3}>
+              <FormControl fullWidth>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={filterParams.status}
+                  onChange={(e) => setFilterParams({ ...filterParams, status: e.target.value })}
+                  label="Status"
+                >
+                  <MenuItem value="">All</MenuItem>
+                  <MenuItem value="Pending">Pending</MenuItem>
+                  <MenuItem value="Approved">Approved</MenuItem>
+                  <MenuItem value="Rejected">Rejected</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Start Date"
+                type="date"
+                value={filterParams.startDate}
+                onChange={(e) => setFilterParams({ ...filterParams, startDate: e.target.value })}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="End Date"
+                type="date"
+                value={filterParams.endDate}
+                onChange={(e) => setFilterParams({ ...filterParams, endDate: e.target.value })}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={3}>
+              <TextField
+                label="Employee Name"
+                value={filterParams.employeeName}
+                onChange={(e) => setFilterParams({ ...filterParams, employeeName: e.target.value })}
+                fullWidth
+              />
+            </Grid>
+          </Grid>
+        </Box>
+      </Collapse>
+
+      {selectedLeaves.length > 0 && (
+        <Box sx={{ mb: 2, display: "flex", gap: 2, position: "sticky", top: 0, bgcolor: "background.paper", zIndex: 1 }}>
+          <StyledButton variant="contained" color="success" onClick={() => handleBulkAction("Approve")}>
+            Approve Selected
+          </StyledButton>
+          <StyledButton variant="outlined" color="error" onClick={() => handleBulkAction("Reject")}>
+            Reject Selected
+          </StyledButton>
+        </Box>
+      )}
+
+      <TableContainer sx={{ maxHeight: 500, overflowX: "auto" }}>
+        <Table stickyHeader sx={{ minWidth: "1200px" }}>
+          <TableHead>
+            <TableRow>
+              <TableCell>
+                <Checkbox
+                  checked={paginatedLeaves.length > 0 && selectedLeaves.length === paginatedLeaves.length}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedLeaves(paginatedLeaves.map((l) => l._id));
+                    else setSelectedLeaves([]);
+                  }}
+                  aria-label="Select all leaves"
+                />
+              </TableCell>
+              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }} onClick={() => handleSort("employeeName")}>
+                Employee {sortColumn === "employeeName" && (sortDirection === "asc" ? "↑" : "↓")}
+              </TableCell>
+              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }}>Days</TableCell>
+              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }} onClick={() => handleSort("startDate")}>
+                Start Date {sortColumn === "startDate" && (sortDirection === "asc" ? "↑" : "↓")}
+              </TableCell>
+              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }}>End Date</TableCell>
+              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }} onClick={() => handleSort("status")}>
+                Status {sortColumn === "status" && (sortDirection === "asc" ? "↑" : "↓")}
+              </TableCell>
+              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }}>Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {paginatedLeaves.length > 0 ? (
+              paginatedLeaves.map((leave) => (
+                <TableRow
+                  key={leave._id}
+                  hover
+                  sx={{
+                    "&:hover": { bgcolor: "#f0f0f0" },
+                    bgcolor: getRowBackgroundColor(leave),
+                    transition: "background-color 0.3s ease",
+                  }}
+                >
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedLeaves.includes(leave._id)}
+                      onChange={(e) => {
+                        if (e.target.checked) setSelectedLeaves([...selectedLeaves, leave._id]);
+                        else setSelectedLeaves(selectedLeaves.filter((id) => id !== leave._id));
+                      }}
+                      aria-label={`Select leave ${leave._id}`}
+                    />
+                  </TableCell>
+                  <TableCell>{leave.employeeName}</TableCell>
+                  <TableCell>{leave.daysApplied}</TableCell>
+                  <TableCell>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
+                  <TableCell>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
+                  <TableCell>
+                    <Tooltip title={leave.status}>
+                      {getStatusChip(leave)}
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell>
+                    <IconButton
+                      aria-label="more actions"
+                      onClick={(e) => handleMenuOpen(e, leave)}
+                    >
+                      <MoreVertIcon />
+                    </IconButton>
+                    <Menu
+                      anchorEl={anchorEl}
+                      open={Boolean(anchorEl) && contextLeave?._id === leave._id}
+                      onClose={handleMenuClose}
+                    >
+                      <MenuItem onClick={() => { handleViewDetails(leave); handleMenuClose(); }}>View Details</MenuItem>
+                      {(userRole === "HRDirector" || userRole === "Admin") && (
+                        <>
+                          <MenuItem onClick={() => { handleEditClick(leave); handleMenuClose(); }}>Edit</MenuItem>
+                          <MenuItem onClick={() => { handleDeleteClick(leave._id); handleMenuClose(); }}>Delete</MenuItem>
+                        </>
+                      )}
+                    </Menu>
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={7} align="center">
+                  {showPendingActionsOnly ? "No pending actions for your role" : `No ${isShortLeave ? "short" : "annual"} leave requests found`}
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <Pagination
+        count={Math.ceil(filteredLeaves.length / rowsPerPage)}
+        page={currentPage}
+        onChange={(e, page) => setCurrentPage(page)}
+        sx={{ mt: 2, display: "flex", justifyContent: "center" }}
+      />
+    </>
+  );
+};
+
 
 const AdminDashboard = () => {
   const { token, logout, user } = useContext(AuthContext);
@@ -209,7 +809,13 @@ const AdminDashboard = () => {
     leaveType: "",
     status: "",
   });
-
+  const [selectedLeaves, setSelectedLeaves] = useState([]);
+  const [specificRoleFilter, setSpecificRoleFilter] = useState("All");
+  const [filterParams, setFilterParams] = useState({ status: "", startDate: "", endDate: "", employeeName: "" });
+  const [sortColumn, setSortColumn] = useState("startDate");
+  const [sortDirection, setSortDirection] = useState("asc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage] = useState(10);
   const localToken = localStorage.getItem("token");
   const effectiveToken = token || localToken;
   const effectiveUser = user || JSON.parse(localStorage.getItem("user") || "{}");
@@ -322,12 +928,14 @@ const AdminDashboard = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get("/api/users/users", {
+      const response = await apiClient.get("/api/users", {
         headers: { Authorization: `Bearer ${effectiveToken}` },
       });
       setUsers(response.data);
     } catch (error) {
-      const errorMessage = error.response?.data?.error || "An error occurred";
+      const errorMessage = error.response?.data?.status === 404
+      ? "Users endpoint not found (404). Check backend route setup for /api/users. Server logs may help."
+      : error.response?.data?.error || `Access denied: Your role (${effectiveUser.role}) may not have permission.`;
       setMessage({ type: "error", text: errorMessage });
       addNotification(errorMessage, "error");
     }
@@ -390,8 +998,21 @@ const AdminDashboard = () => {
   }, [effectiveToken, navigate]);
 
   useEffect(() => {
-    if (!effectiveToken) return;
+  if (!effectiveToken || !effectiveUser || !effectiveUser?.role) {
+    navigate("/login");
+    return;
+  }
 
+  console.log("Current role:", effectiveUser.role);
+
+    const allowedRoles = ["Admin", "Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector"];
+    console.log(`User role '${effectiveUser.role}' is allowed?`, allowedRoles.includes(effectiveUser.role));
+    if (!allowedRoles.includes(effectiveUser.role)) {
+      setMessage({ type: "error", text: `Access restricted to roles: ${allowedRoles.join(", ")}` });
+      addNotification(`Access restricted to roles: ${allowedRoles.join(", ")}`, "error");
+      return;
+    }
+    
     const fetchData = async () => {
       setIsLoading(true);
       await Promise.all([fetchLeaves(), fetchProfile(), fetchLeaveEvents(), fetchStats(), fetchUsers()]);
@@ -507,12 +1128,19 @@ const AdminDashboard = () => {
 
       setMessage({ type: "success", text: `Leave ${action.toLowerCase()} successfully` });
       addNotification(`Leave ${action.toLowerCase()} successfully`, "success");
-    } catch (error) {
-      const errorMessage = error.response?.data?.error || "Failed to update leave";
-      setMessage({ type: "error", text: errorMessage });
-      addNotification(errorMessage, "error");
+   } catch (error) {
+    const errorMessage = error.response?.data?.error || "Failed to update leave";
+    setMessage({ type: "error", text: errorMessage });
+    addNotification(errorMessage, "error");
+    if (error.response?.status === 401) {
+      logout();
+      navigate("/login");
+    } else if (error.response?.status === 403) {
+      setMessage({ type: "error", text: "You do not have permission to perform this action" });
+      addNotification("You do not have permission to perform this action", "error");
     }
-  };
+  }
+};
 
   const handleLogout = () => {
     logout();
@@ -632,6 +1260,58 @@ const AdminDashboard = () => {
     }
   };
 
+
+  const handleBulkAction = async (action) => {
+  if (selectedLeaves.length === 0) {
+    setMessage({ type: "warning", text: "No leaves selected" });
+    return;
+  }
+  const confirm = window.confirm(`Are you sure you want to ${action.toLowerCase()} ${selectedLeaves.length} leave(s)?`);
+  if (!confirm) return;
+
+  try {
+    await Promise.all(selectedLeaves.map((leaveId) =>
+      apiClient.patch(`/api/leaves/admin/leaves/${leaveId}`, {
+        approverRecommendation: action === "Approve" ? "Approved" : "Not Approved",
+        approverDate: new Date().toISOString(),
+        status: action === "Approve" ? "Approved" : "Rejected",
+      }, { headers: { Authorization: `Bearer ${effectiveToken}` } })
+    ));
+    setMessage({ type: "success", text: `${action}ed ${selectedLeaves.length} leaves successfully` });
+    setSelectedLeaves([]);
+    await Promise.all([fetchLeaves(), fetchLeaveEvents()]);
+ } catch (error) {
+    const errorMessage = error.response?.data?.error || `Failed to ${action.toLowerCase()} leaves`;
+    setMessage({ type: "error", text: errorMessage });
+    addNotification(errorMessage, "error");
+    if (error.response?.status === 401) {
+      logout();
+      navigate("/login");
+    } else if (error.response?.status === 403) {
+      setMessage({ type: "error", text: "You do not have permission to perform this action" });
+      addNotification("You do not have permission to perform this action", "error");
+    }
+  }
+};
+
+const handleSort = (column) => {
+  setSortColumn(column);
+  setSortDirection(sortColumn === column && sortDirection === "asc" ? "desc" : "asc");
+};
+
+const handleEditClick = (leave) => {
+  // Implement edit logic (e.g., open edit modal)
+  console.log("Edit:", leave);
+};
+
+const handleDeleteClick = (leaveId) => {
+  // Implement delete logic with confirmation
+  const confirm = window.confirm("Are you sure you want to delete this leave?");
+  if (confirm) {
+    // Call API to delete
+    console.log("Delete:", leaveId);
+  }
+};
   const handleSearchChange = (e) => {
     const { name, value } = e.target;
     setSearchParams({ ...searchParams, [name]: value });
@@ -879,312 +1559,103 @@ const AdminDashboard = () => {
             </>
           )}
 
-          {activeSection === "Short Leave Requests" && (
-            <>
-              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-                Short Leave Requests
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <StyledButton
-                  variant={showPendingActionsOnly ? "contained" : "outlined"}
-                  color="primary"
-                  onClick={() => setShowPendingActionsOnly(!showPendingActionsOnly)}
-                >
-                  {showPendingActionsOnly ? "Show All Leaves" : "Show Pending Actions Only"}
-                </StyledButton>
-              </Box>
-              <TableContainer sx={{ height: "calc(100% - 120px)", overflow: "auto" }}>
-                <Table stickyHeader sx={{ width: "100%", tableLayout: "auto" }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>ID</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Employee</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Days</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Start Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>End Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Details</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filterLeavesByPendingActions(shortLeaves, true, effectiveUser.role, showPendingActionsOnly).length > 0 ? (
-                      filterLeavesByPendingActions(shortLeaves, true, effectiveUser.role, showPendingActionsOnly).map((leave) => (
-                        <TableRow
-                          key={leave._id}
-                          hover
-                          sx={{
-                            "&:hover": { bgcolor: "#f0f0f0" },
-                            bgcolor: isActiveLeave(leave) ? "#e0f7fa" : "inherit",
-                          }}
-                        >
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave._id.slice(-6)}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.employeeName}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.daysApplied}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <Tooltip title={leave.status}>
-                              {getStatusChip(leave)}
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              onClick={() => handleViewDetails(leave)}
-                              variant="outlined"
-                              size="small"
-                              sx={{ borderRadius: 1 }}
-                            >
-                              View
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={7} align="center">
-                          {showPendingActionsOnly ? "No pending actions for your role" : "No short leave requests found"}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </>
-          )}
+          
 
-          {activeSection === "Annual Leave Requests" && (
-            <>
-              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-                Annual Leave Requests
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <StyledButton
-                  variant={showPendingActionsOnly ? "contained" : "outlined"}
-                  color="primary"
-                  onClick={() => setShowPendingActionsOnly(!showPendingActionsOnly)}
-                >
-                  {showPendingActionsOnly ? "Show All Leaves" : "Show Pending Actions Only"}
-                </StyledButton>
-              </Box>
-              <TableContainer sx={{ height: "calc(100% - 120px)", overflow: "auto" }}>
-                <Table stickyHeader sx={{ width: "100%", tableLayout: "auto" }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>ID</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Employee</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Days</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Start Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>End Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Details</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {filterLeavesByPendingActions(annualLeaves, false, effectiveUser.role, showPendingActionsOnly).length > 0 ? (
-                      filterLeavesByPendingActions(annualLeaves, false, effectiveUser.role, showPendingActionsOnly).map((leave) => (
-                        <TableRow
-                          key={leave._id}
-                          hover
-                          sx={{
-                            "&:hover": { bgcolor: "#f0f0f0" },
-                            bgcolor: isActiveLeave(leave) ? "#e0f7fa" : "inherit",
-                          }}
-                        >
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave._id.slice(-6)}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.employeeName}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.daysApplied}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <Tooltip title={leave.status}>
-                              {getStatusChip(leave)}
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              onClick={() => handleViewDetails(leave)}
-                              variant="outlined"
-                              size="small"
-                              sx={{ borderRadius: 1 }}
-                            >
-                              View
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={7} align="center">
-                          {showPendingActionsOnly ? "No pending actions for your role" : "No annual leave requests found"}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </>
-          )}
+  {activeSection === "Short Leave Requests" && (
+    <LeaveTable
+      leaves={shortLeaves}
+      isShortLeave={true}
+      userRole={effectiveUser.role}
+      showPendingActionsOnly={showPendingActionsOnly}
+      setShowPendingActionsOnly={setShowPendingActionsOnly}
+      handleAction={handleAction}
+      handleViewDetails={handleViewDetails}
+      selectedLeaves={selectedLeaves}
+      setSelectedLeaves={setSelectedLeaves}
+      handleBulkAction={handleBulkAction}
+      specificRoleFilter={specificRoleFilter}
+      setSpecificRoleFilter={setSpecificRoleFilter}
+      filterParams={filterParams}
+      setFilterParams={setFilterParams}
+      sortColumn={sortColumn}
+      sortDirection={sortDirection}
+      handleSort={handleSort}
+      currentPage={currentPage}
+      setCurrentPage={setCurrentPage}
+      rowsPerPage={rowsPerPage}
+      isActiveLeave={isActiveLeave}
+      getStatusChip={getStatusChip}
+      handleEditClick={handleEditClick}    
+      handleDeleteClick={handleDeleteClick}
+    />
+  )}
 
-          {activeSection === "Approval Workflow" && (
-            <>
-              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-                Approval Workflow
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              <Box sx={{ mb: 2 }}>
-                <StyledButton
-                  variant={showPendingActionsOnly ? "contained" : "outlined"}
-                  color="primary"
-                  onClick={() => setShowPendingActionsOnly(!showPendingActionsOnly)}
-                >
-                  {showPendingActionsOnly ? "Show All Leaves" : "Show Pending Actions Only"}
-                </StyledButton>
-              </Box>
-              <TableContainer sx={{ height: "calc(100% - 120px)", overflow: "auto" }}>
-                <Table stickyHeader sx={{ width: "100%", tableLayout: "auto" }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>ID</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Employee</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Type</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Days</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Start Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>End Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Actions</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Details</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {[...shortLeaves, ...annualLeaves]
-                      .filter((leave) => filterLeavesByPendingActions([leave], shortLeaves.some((l) => l._id === leave._id), effectiveUser.role, showPendingActionsOnly).length > 0)
-                      .map((leave) => (
-                        <TableRow
-                          key={leave._id}
-                          hover
-                          sx={{
-                            "&:hover": { bgcolor: "#f0f0f0" },
-                            bgcolor: isActiveLeave(leave) ? "#e0f7fa" : "inherit",
-                          }}
-                        >
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave._id.slice(-6)}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.employeeName}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.leaveType}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.daysApplied}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <Tooltip title={leave.status}>
-                              {getStatusChip(leave)}
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>
-                            {(effectiveUser.role === "Supervisor" && leave.leaveType === "Short Leave") && (
-                              <>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Recommended")}
-                                  variant="contained"
-                                  color="primary"
-                                  size="small"
-                                  sx={{ mr: 1, borderRadius: 1 }}
-                                >
-                                  Recommend
-                                </Button>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Not Recommended")}
-                                  variant="outlined"
-                                  color="secondary"
-                                  size="small"
-                                  sx={{ mr: 1, borderRadius: 1 }}
-                                >
-                                  Not Recommend
-                                </Button>
-                              </>
-                            )}
-                            {(effectiveUser.role === "SectionalHead" && leave.leaveType === "Annual Leave") && (
-                              <>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Recommended")}
-                                  variant="contained"
-                                  color="primary"
-                                  size="small"
-                                  sx={{ mr: 1, borderRadius: 1 }}
-                                >
-                                  Recommend
-                                </Button>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Not Recommended")}
-                                  variant="outlined"
-                                  color="secondary"
-                                  size="small"
-                                  sx={{ mr: 1, borderRadius: 1 }}
-                                >
-                                  Not Recommend
-                                </Button>
-                              </>
-                            )}
-                            {(effectiveUser.role === "DepartmentalHead" && leave.leaveType === "Annual Leave") && (
-                              <>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Recommended")}
-                                  variant="contained"
-                                  color="primary"
-                                  size="small"
-                                  sx={{ mr: 1, borderRadius: 1 }}
-                                >
-                                  Recommend
-                                </Button>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Not Recommended")}
-                                  variant="outlined"
-                                  color="secondary"
-                                  size="small"
-                                  sx={{ mr: 1, borderRadius: 1 }}
-                                >
-                                  Not Recommend
-                                </Button>
-                              </>
-                            )}
-                            {(effectiveUser.role === "HRDirector" || effectiveUser.role === "Admin") && (
-                              <>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Approve")}
-                                  variant="contained"
-                                  color="success"
-                                  size="small"
-                                  sx={{ mr: 1, borderRadius: 1 }}
-                                >
-                                  Approve
-                                </Button>
-                                <Button
-                                  onClick={() => handleAction(leave._id, "Reject")}
-                                  variant="outlined"
-                                  color="error"
-                                  size="small"
-                                  sx={{ borderRadius: 1 }}
-                                >
-                                  Reject
-                                </Button>
-                              </>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              onClick={() => handleViewDetails(leave)}
-                              variant="outlined"
-                              size="small"
-                              sx={{ borderRadius: 1 }}
-                            >
-                              View
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </>
-          )}
+  {activeSection === "Annual Leave Requests" && (
+    <LeaveTable
+      leaves={annualLeaves}
+      isShortLeave={false}
+      userRole={effectiveUser.role}
+      showPendingActionsOnly={showPendingActionsOnly}
+      setShowPendingActionsOnly={setShowPendingActionsOnly}
+      handleAction={handleAction}
+      handleViewDetails={handleViewDetails}
+      selectedLeaves={selectedLeaves}
+      setSelectedLeaves={setSelectedLeaves}
+      handleBulkAction={handleBulkAction}
+      specificRoleFilter={specificRoleFilter}
+      setSpecificRoleFilter={setSpecificRoleFilter}
+      filterParams={filterParams}
+      setFilterParams={setFilterParams}
+      sortColumn={sortColumn}
+      sortDirection={sortDirection}
+      handleSort={handleSort}
+      currentPage={currentPage}
+      setCurrentPage={setCurrentPage}
+      rowsPerPage={rowsPerPage}
+      isActiveLeave={isActiveLeave}
+      getStatusChip={getStatusChip}
+      handleEditClick={handleEditClick}    
+      handleDeleteClick={handleDeleteClick}
+    />
+  )}
+
+  
+
+ {activeSection === "Approval Workflow" && (
+  <>
+    <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
+      Approval Workflow
+    </Typography>
+    <Divider sx={{ mb: 3 }} />
+    <LeaveTable
+      leaves={[...shortLeaves, ...annualLeaves]}
+      isShortLeave={false} // Can be adjusted based on context
+      userRole={effectiveUser.role}
+      showPendingActionsOnly={showPendingActionsOnly}
+      setShowPendingActionsOnly={setShowPendingActionsOnly}
+      handleAction={handleAction}
+      handleViewDetails={handleViewDetails}
+      selectedLeaves={selectedLeaves}
+      setSelectedLeaves={setSelectedLeaves}
+      handleBulkAction={handleBulkAction}
+      specificRoleFilter={specificRoleFilter}
+      setSpecificRoleFilter={setSpecificRoleFilter}
+      filterParams={filterParams}
+      setFilterParams={setFilterParams}
+      sortColumn={sortColumn}
+      sortDirection={sortDirection}
+      handleSort={handleSort}
+      currentPage={currentPage}
+      setCurrentPage={setCurrentPage}
+      rowsPerPage={rowsPerPage}
+      isActiveLeave={isActiveLeave}
+      getStatusChip={getStatusChip}
+      handleEditClick={handleEditClick}    
+      handleDeleteClick={handleDeleteClick}
+
+    />
+  </>
+)}
 
           {activeSection === "Leave Roster" && (
             <>
@@ -1195,265 +1666,32 @@ const AdminDashboard = () => {
               <LeaveRoster />
             </>
           )}
-
+         
           {activeSection === "Profile" && (
             <>
               <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
                 Admin Profile
               </Typography>
               <Divider sx={{ mb: 3 }} />
-              {isEditingProfile ? (
-                <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.name}
-                        helperText={formErrors.name}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.email}
-                        helperText={formErrors.email}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Department"
-                        name="department"
-                        value={formData.department}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.department}
-                        helperText={formErrors.department}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Phone Number"
-                        name="phoneNumber"
-                        value={formData.phoneNumber}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.phoneNumber}
-                        helperText={formErrors.phoneNumber}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Input
-                        type="file"
-                        name="profilePicture"
-                        onChange={handleInputChange}
-                        fullWidth
-                        inputProps={{ accept: "image/*" }}
-                      />
-                      {formData.profilePicture && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          Selected file: {formData.profilePicture.name}
-                        </Typography>
-                      )}
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Chief Officer Name"
-                        name="chiefOfficerName"
-                        value={formData.chiefOfficerName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Supervisor Name"
-                        name="supervisorName"
-                        value={formData.supervisorName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Person Number"
-                        name="personNumber"
-                        value={formData.personNumber}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Sector"
-                        name="sector"
-                        value={formData.sector}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Sectional Head Name"
-                        name="sectionalHeadName"
-                        value={formData.sectionalHeadName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Departmental Head Name"
-                        name="departmentalHeadName"
-                        value={formData.departmentalHeadName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="HR Director Name"
-                        name="HRDirectorName"
-                        value={formData.HRDirectorName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                  </Grid>
-                  <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                    <StyledButton variant="contained" color="primary" onClick={handleProfileUpdate}>
-                      Save
-                    </StyledButton>
-                    <StyledButton
-                      variant="outlined"
-                      color="secondary"
-                      onClick={() => setIsEditingProfile(false)}
-                    >
-                      Cancel
-                    </StyledButton>
-                  </Box>
-                </Box>
-              ) : (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-                    <Avatar
-                      src={profile?.profilePicture || ""}
-                      alt={profile?.name || "Admin"}
-                      sx={{ width: 80, height: 80 }}
-                    />
-                    <Typography variant="h6">{profile?.name || "N/A"}</Typography>
-                  </Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Email:</strong> {profile?.email || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Department:</strong> {profile?.department || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Phone Number:</strong> {profile?.phoneNumber || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Chief Officer:</strong> {profile?.chiefOfficerName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Supervisor:</strong> {profile?.supervisorName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Person Number:</strong> {profile?.personNumber || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Sector:</strong> {profile?.sector || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Sectional Head:</strong> {profile?.sectionalHeadName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Departmental Head:</strong> {profile?.departmentalHeadName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>HR Director:</strong> {profile?.HRDirectorName || "N/A"}
-                      </Typography>
-                    </Grid>
-                  </Grid>
-                  <StyledButton
-                    variant="contained"
-                    color="primary"
-                    onClick={() => setIsEditingProfile(true)}
-                    sx={{ mt: 3, width: "fit-content" }}
-                  >
-                    Edit Profile
-                  </StyledButton>
-                </Box>
-              )}
+              <ProfileTable profile={profile} />
             </>
           )}
 
-          {activeSection === "Calendar" && (
-            <>
-              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-                Leave Calendar
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              {calendarError ? (
-                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <Typography variant="body1" sx={{ color: "#f44336" }}>
-                    {calendarError}
-                  </Typography>
-                  <StyledButton
-                    variant="contained"
-                    color="primary"
-                    onClick={fetchLeaveEvents}
-                    disabled={isFetchingEvents}
-                  >
-                    {isFetchingEvents ? <CircularProgress size={24} /> : "Retry"}
-                  </StyledButton>
-                </Box>
-              ) : (
-                <Box sx={{ height: "calc(100% - 80px)" }}>
-                  <Calendar
-                    localizer={localizer}
-                    events={events}
-                    startAccessor="start"
-                    endAccessor="end"
-                    style={{ height: "100%", width: "100%" }}
-                    onSelectEvent={(event) => setSelectedEvent(event)}
-                    eventPropGetter={(event) => ({
-                      style: event.style,
-                    })}
-                  />
-                </Box>
-              )}
-            </>
-          )}
-        </Paper>
-      </MainContent>
+          
+
+    {activeSection === "Calendar" && (
+      <LeaveCalendar
+        calendarError={calendarError}
+        isFetchingEvents={isFetchingEvents}
+        fetchLeaveEvents={fetchLeaveEvents}
+        events={events}
+        setSelectedEvent={setSelectedEvent}
+      />
+    )}
+  </Paper>
+</MainContent>
+
+       
 
       {/* Leave Details Modal */}
       <Modal open={!!selectedLeave} onClose={handleCloseModal}>

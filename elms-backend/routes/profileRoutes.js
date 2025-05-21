@@ -2,7 +2,59 @@ const express = require("express");
 const { verifyToken}  = require("../middleware/authMiddleware"); // Protect routes
 const router = express.Router();
 const Profile = require("../models/Profile");
+const User = require('../models/User');
 
+router.get('/profile/:id', verifyToken, async (req, res) => {
+  try {
+    const profile = await Profile.findOne({ userId: req.params.id });
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    res.status(200).json({ sector: profile.sector });
+  } catch (error) {
+    console.error('Error fetching profile:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+router.get('/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const profile = await Profile.findOne({ userId });
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    res.json(profile);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+router.get('/profiles', async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({
+      name: user.name,
+      department: user.department,
+      phoneNumber: user.phoneNumber || '',
+      profilePicture: user.profilePicture || '',
+      chiefOfficerName: user.chiefOfficerName || '',
+      supervisorName: user.supervisorName || '',
+      personNumber: user.personNumber || '',
+      email: user.email,
+      sector: user.sector || '',
+      sectionalHeadName: user.sectionalHeadName || '',
+      departmentalHeadName: user.departmentalHeadName || '',
+      HRDirectorName: user.HRDirectorName || ''
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Get Profile
 router.get("/", verifyToken, async (req, res) => {

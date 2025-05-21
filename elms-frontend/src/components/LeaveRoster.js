@@ -5,6 +5,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend } from "
 
 const LeaveRoster = () => {
   const [roster, setRoster] = useState(null);
+  const [employees, setEmployees] = useState([]);
   const [employeesLeaves, setEmployeesLeaves] = useState([]);
   const [newPeriod, setNewPeriod] = useState({
     startDate: "",
@@ -14,32 +15,52 @@ const LeaveRoster = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [error, setError] = useState(null);
-  const user = JSON.parse(localStorage.getItem("user")) || {};
+  const [user, setUser ] = useState(JSON.parse(localStorage.getItem("user")) || {});
+  
+  
+const fetchUserProfile = async () => {
+    try {
+      const response = await apiClient.get(`/api/profile/${user.id}`);
+      const updatedUser = { ...user, sector: response.data.sector };
+      setUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to fetch user profile");
+    }
+  };
 
   const fetchRoster = async () => {
-    //console.log('Fetching roster for userId:', userId);
     try {
       const response = await apiClient.get(`/api/leave-roster/${user.id}`);
       console.log('Roster response:', response.data);
       setRoster(response.data);
     } catch (err) {
-      console.error('Error fetching roster:', error.response?.data || error.message);
+      console.error('Error fetching roster:', err.response?.data || err.message);
       setError(err.response?.data?.error || "Failed to fetch roster");
     }
   };
 
-  const fetchEmployeesLeaves = async () => {
+  const fetchEmployees = async () => {
     try {
-      const monthString = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
-      const endpoint = user.role === "Admin" 
-        ? `/api/leaves/approved?month=${monthString}`
-        : `/api/leaves/approved?month=${monthString}&employeeId=${user.id}`;
-      const response = await apiClient.get(endpoint);
-      setEmployeesLeaves(response.data);
+      const response = await apiClient.get(`/api/users/sector`);
+      setEmployees(response.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to fetch leaves for roster");
+      setError(err.response?.data?.error || "Failed to fetch employees");
     }
   };
+
+ const fetchEmployeesLeaves = async () => {
+  try {
+    const monthString = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
+    const endpoint = user.role === "Admin"
+      ? `/api/leaves/approved?month=${monthString}`
+      : `/api/leaves/approved?sector=${user.sector}&month=${monthString}`;
+    const response = await apiClient.get(endpoint);
+    setEmployeesLeaves(response.data);
+  } catch (err) {
+    setError(err.response?.data?.error || "Failed to fetch leaves for roster");
+  }
+};
 
   const handleSuggestPeriod = async (e) => {
     e.preventDefault();
@@ -71,8 +92,13 @@ const LeaveRoster = () => {
   };
 
   useEffect(() => {
-    fetchRoster();
-    fetchEmployeesLeaves();
+    if (!user.sector) {
+      fetchUserProfile();
+    } else {
+      fetchRoster();
+      fetchEmployees();
+      fetchEmployeesLeaves();
+    }
 
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -95,9 +121,9 @@ const LeaveRoster = () => {
 
   useEffect(() => {
     fetchEmployeesLeaves();
-  }, []);
+  }, [selectedMonth, selectedYear, user.sector]); 
 
-  // Leave Roster Calendar Logic
+
   const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -110,31 +136,31 @@ const LeaveRoster = () => {
     return eachDayOfInterval({ start: monthStart, end: monthEnd });
   };
 
-  const getLeaveCode = (leaveType) => {
+ const getLeaveCode = (leaveType) => {
     switch (leaveType) {
       case "Annual Leave":
-      case "Short Leave":
-        return "L"; // Vacation Leave
+      case "Short Leave": return "L";
       case "Emergency Leave":
-        return "C"; // Compassionate Leave
-      case "Maternity Leave":
-        return "P"; // Maternity or Paternity
-      default:
-        return "";
+      case "Compassionate": return "C";
+      case "Maternity Leave": return "P";
+      case "Terminal": return "T";
+      case "Sports": return "S";
+      case "Unpaid": return "U";
+      default: return "";
     }
   };
 
   const getLeaveColor = (leaveType) => {
     switch (leaveType) {
       case "Annual Leave":
-      case "Short Leave":
-        return "#28a745"; // Green (Vacation Leave)
+      case "Short Leave": return "#28a745"; // Green
       case "Emergency Leave":
-        return "#ffc107"; // Yellow (Compassionate Leave)
-      case "Maternity Leave":
-        return "#007bff"; // Blue (Maternity or Paternity)
-      default:
-        return "transparent";
+      case "Compassionate": return "#ffc107"; // Amber
+      case "Maternity Leave": return "#007bff"; // Blue
+      case "Terminal": return "#ff6347"; // Tomato Red
+      case "Sports": return "#20b2aa"; // Light Sea Green
+      case "Unpaid": return "#a9a9a9"; // Dark Gray
+      default: return "transparent";
     }
   };
 
@@ -174,13 +200,19 @@ const LeaveRoster = () => {
         acc[leave.employeeName].push(leave);
         return acc;
       }, {})
-    : { [user.name]: employeesLeaves };
+    : employeesLeaves.reduce((acc, leave) => {
+        if (!acc[leave.employeeName]) {
+          acc[leave.employeeName] = [];
+        }
+        acc[leave.employeeName].push(leave);
+        return acc;
+      }, {});
 
   if (!roster) return <div className="p-6">Loading...</div>;
 
-  return (
+ return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Leave Roster for {user.role === "Admin" ? "All Employees" : roster.employeeId.name}</h2>
+      <h2 className="text-2xl font-bold mb-4">Leave Roster for {user.role === "Admin" ? "All Employees" : `${user.sector || "undefined"} Sector`}</h2>
       {error && <div className="text-red-500 mb-4">{error}</div>}
 
       {/* Calendar View */}
@@ -195,9 +227,7 @@ const LeaveRoster = () => {
               className="w-40 p-2 border rounded"
             >
               {months.map((month, index) => (
-                <option key={index} value={index + 1}>
-                  {month}
-                </option>
+                <option key={index} value={index + 1}>{month}</option>
               ))}
             </select>
           </div>
@@ -209,9 +239,7 @@ const LeaveRoster = () => {
               className="w-40 p-2 border rounded"
             >
               {years.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
+                <option key={year} value={year}>{year}</option>
               ))}
             </select>
           </div>
@@ -231,28 +259,27 @@ const LeaveRoster = () => {
               </tr>
             </thead>
             <tbody>
-              {Object.keys(groupedLeaves).length > 0 ? (
-                Object.entries(groupedLeaves).map(([employeeName, leaves]) => {
-                  const leaveDays = getEmployeeLeaveDays(leaves, getDaysArray());
-                  return (
-                    <tr key={employeeName} className="border">
-                      <td className="border p-2 sticky left-0 bg-white min-w-[150px]">{employeeName}</td>
-                      {getDaysArray().map((_, index) => (
-                        <td
-                          key={index}
-                          className="border p-2 text-center min-w-[40px]"
-                          style={{ backgroundColor: leaveDays[index + 1].color, color: leaveDays[index + 1].color !== "transparent" ? "#fff" : "inherit" }}
-                        >
-                          {leaveDays[index + 1].code}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })
+              {employees.length > 0 ? (
+                employees.map((employee) => (
+                  <tr key={employee._id} className="border">
+                    <td className="border p-2 sticky left-0 bg-white min-w-[150px]">
+                      {employee.name} 
+                    </td>
+                    {getDaysArray().map((_, index) => (
+                      <td
+                        key={index}
+                        className="border p-2 text-center min-w-[40px]"
+                        style={{ backgroundColor: "transparent", color: "#000" }}
+                      >
+                        -
+                      </td>
+                    ))}
+                  </tr>
+                ))
               ) : (
                 <tr>
                   <td colSpan={getDaysArray().length + 1} className="border p-2 text-center">
-                    No leave data available
+                    No employees found in this sector
                   </td>
                 </tr>
               )}
@@ -260,8 +287,8 @@ const LeaveRoster = () => {
           </table>
         </div>
 
-        {/* Legend */}
-        <div className="mt-4">
+        {/* Key */}
+       <div className="mt-4">
           <h4 className="text-lg font-semibold mb-2">Legend</h4>
           <div className="flex gap-4 flex-wrap">
             <div className="flex items-center">
@@ -275,6 +302,18 @@ const LeaveRoster = () => {
             <div className="flex items-center">
               <div className="w-5 h-5 mr-2" style={{ backgroundColor: "#007bff" }}></div>
               <span>Maternity or Paternity (P)</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-5 h-5 mr-2" style={{ backgroundColor: "#ff6347" }}></div>
+              <span>Terminal Leave (T)</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-5 h-5 mr-2" style={{ backgroundColor: "#20b2aa" }}></div>
+              <span>Sports Leave (S)</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-5 h-5 mr-2" style={{ backgroundColor: "#a9a9a9" }}></div>
+              <span>Unpaid Leave (U)</span>
             </div>
             <div className="flex items-center">
               <div className="w-5 h-5 mr-2" style={{ backgroundColor: "#d3d3d3" }}></div>
@@ -319,7 +358,11 @@ const LeaveRoster = () => {
               <option value="Short Leave">Short Leave</option>
               <option value="Emergency Leave">Emergency Leave</option>
               <option value="Maternity Leave">Maternity Leave</option>
-            </select>
+              <option value="Terminal">Terminal</option>
+              <option value="Compassionate">Compassionate</option>
+              <option value="Sports">Sports</option>
+              <option value="Unpaid">Unpaid</option>
+              </select>
           </div>
           <div className="col-span-3">
             <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">
@@ -353,7 +396,7 @@ const LeaveRoster = () => {
                   <td className="border p-2">{period.status}</td>
                   <td className="border p-2">{period.suggestedBy}</td>
                   <td className="border p-2">
-                    {period.status === "Suggested" && ["Supervisor", "HRDirector", "Admin"].includes(user.role) && (
+                    {period.status === "Suggested" && ["Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector", "Admin"].includes(user.role) && (
                       <>
                         <button
                           onClick={() => handleUpdatePeriod(period._id, "Confirmed")}

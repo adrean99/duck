@@ -7,6 +7,14 @@ const UserSchema = new mongoose.Schema({
     role: { type: String, enum: ["Employee", "Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector", "Admin"], default: "Employee" },
     profilePicture: { type: String, default: "" }, 
     department: { type: String, required: true },
+    profilePicture: { type: String },
+    chiefOfficerName: { type: String },
+    supervisorName: { type: String },
+    personNumber: { type: String },
+    sector: { type: String },
+    sectionalHeadName: { type: String },
+    departmentalHeadName: { type: String },
+    HRDirectorName: { type: String},
     status: { type: String, enum: ["Active", "Inactive"], default: "Active" },
 }, { timestamps: true });
 

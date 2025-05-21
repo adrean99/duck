@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import apiClient from "../utils/apiClient";
@@ -13,8 +13,12 @@ import {
   Grid,
   CircularProgress,
   Box,
-  TextField,
-  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Badge,
 } from "@mui/material";
 import { styled } from "@mui/system";
 import Sidebar from "../components/Sidebar";
@@ -23,18 +27,167 @@ import Sidebar from "../components/Sidebar";
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
   backgroundColor: "#1976d2",
   boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-  zIndex: 1201, // Ensure AppBar is above Sidebar Drawer
+  zIndex: 1201,
   position: "fixed",
 }));
 
 const MainContent = styled(Box)(({ theme }) => ({
-  marginTop: "64px", // Match AppBar height
-  height: "calc(100vh - 64px)", // Full height minus AppBar
+  marginTop: "64px",
+  height: "calc(100vh - 64px)",
   width: "100%",
-  overflow: "auto", // Handle overflow
+  overflow: "auto",
   padding: theme.spacing(3),
   boxSizing: "border-box",
 }));
+  
+export const ProfileTable = ({ profile }) => {
+  const getInitial = (name) => (name ? name.charAt(0).toUpperCase() : "U");
+
+  return (
+    <Box sx={{ padding: 2, borderRadius: 2, backgroundColor: "#fff", boxShadow: 1 }}>
+      <Grid container spacing={3} alignItems="center" justifyContent="center">
+        {/* Profile Picture Section */}
+        <Grid item xs={12} sm={4}>
+          <Box sx={{ display: "flex", justifyContent: "center", mb: 2 }}>
+            <Badge
+              overlap="circular"
+              anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+              badgeContent={<Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: "#4caf50" }} />}
+            >
+              <Avatar
+                src={profile?.profilePicture || ""}
+                alt={profile?.name || "User"}
+                sx={{ width: 120, height: 120, fontSize: "2rem" }}
+              >
+                {getInitial(profile?.name)}
+              </Avatar>
+            </Badge>
+          </Box>
+          <Typography variant="h6" align="center" sx={{ color: "#1976d2", fontWeight: "bold" }}>
+            {profile?.name || "Unnamed User"}
+          </Typography>
+        </Grid>
+
+        {/* Profile Details in Grid */}
+        <Grid item xs={12} sm={8}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Department
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.department || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Phone Number
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.phoneNumber || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Chief Officer
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.chiefOfficerName || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Supervisor
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.supervisorName || "N/A"}
+                </Typography>
+                </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Person Number
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.personNumber || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Email
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.email || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Sector
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.sector || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Profile Picture URL
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.profilePicture || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Sectional Head
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.sectionalHeadName || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  Departmental Head
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.departmentalHeadName || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
+                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
+                  HR Director
+                </Typography>
+                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  {profile?.HRDirectorName || "N/A"}
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+};
+
 
 const Profile = () => {
   const { token, logout, user } = useContext(AuthContext);
@@ -54,7 +207,7 @@ const Profile = () => {
     HRDirectorName: "",
   });
   const [message, setMessage] = useState({ type: "", text: "" });
-  const [submitting, setSubmitting] = useState(false);
+  //const [submitting, setSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const { addNotification } = useNotifications();
   const localToken = localStorage.getItem("token");
@@ -62,7 +215,7 @@ const Profile = () => {
   const effectiveToken = token || localToken;
   const effectiveUser = user || localUser;
 
-  console.log("Profile rendering - Effective Token:", effectiveToken, "User:", effectiveUser);
+  //console.log("Profile rendering - Effective Token:", effectiveToken, "User:", effectiveUser);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -73,7 +226,7 @@ const Profile = () => {
       }
       setIsLoading(true);
       try {
-        const res = await apiClient.get("/api/profiles", {
+        const res = await apiClient.get(`/api/profiles/${effectiveUser.id}`, {
           headers: { Authorization: `Bearer ${effectiveToken}` },
         });
         console.log("Profile fetched:", res.data);
@@ -84,7 +237,7 @@ const Profile = () => {
           : error.message;
         setMessage({ type: "error", text: `Failed to fetch profile: ${errorMessage}` });
         addNotification(`Failed to fetch profile: ${errorMessage}`, "error");
-      
+
         if (error.response?.status === 401) {
           console.log("401 Unauthorized, logging out");
           logout();
@@ -95,9 +248,9 @@ const Profile = () => {
       }
     };
     fetchProfile();
-  }, [addNotification, effectiveToken, navigate, logout]);
+  }, [addNotification]);
 
-  const handleChange = (e) => {
+  /* const handleChange = (e) => {
     const { name, value } = e.target;
     setProfile((prev) => ({ ...prev, [name]: value }));
   };
@@ -108,7 +261,7 @@ const Profile = () => {
 
     if (!profile.name || !profile.department || !profile.email) {
       setMessage({ type: "error", text: "Name, department, and email are required" });
-     
+
       return;
     }
     if (!effectiveToken) {
@@ -139,7 +292,7 @@ const Profile = () => {
     } finally {
       setSubmitting(false);
     }
-  };
+  };*/
 
   if (!effectiveToken) {
     console.log("Render guard: No effective token, redirecting");
@@ -178,181 +331,11 @@ const Profile = () => {
         </Toolbar>
       </StyledAppBar>
 
-      <MainContent>
+     <MainContent>
         <Paper elevation={3} sx={{ padding: 4, borderRadius: 2, boxShadow: 5, width: "100%" }}>
-          
           {message.text && <Alert severity={message.type}>{message.text}</Alert>}
-          <form onSubmit={handleSubmit}>
-            <Box sx={{ display: "flex", justifyContent: "center", mb: 3 }}>
-              <Avatar
-                src={profile.profilePicture || ""}
-                alt={profile.name}
-                sx={{ width: 100, height: 100 }}
-              />
-            </Box>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Full Name"
-                  name="name"
-                  value={profile.name || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  required
-                  helperText="Your full name"
-                  aria-label="Full Name"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Department"
-                  name="department"
-                  value={profile.department || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  required
-                  helperText="Your department"
-                  aria-label="Department"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Phone Number"
-                  name="phoneNumber"
-                  value={profile.phoneNumber || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="Your contact phone number (optional)"
-                  aria-label="Phone Number"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Chief Officer Name"
-                  name="chiefOfficerName"
-                  value={profile.chiefOfficerName || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="Name of the Chief Officer (optional)"
-                  aria-label="Chief Officer Name"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Supervisor Name"
-                  name="supervisorName"
-                  value={profile.supervisorName || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="Your supervisor's name (optional)"
-                  aria-label="Supervisor Name"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Person Number"
-                  name="personNumber"
-                  value={profile.personNumber || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="Your personnel number (optional)"
-                  aria-label="Person Number"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Email"
-                  name="email"
-                  value={profile.email || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  required
-                  helperText="Your email address"
-                  aria-label="Email"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Sector"
-                  name="sector"
-                  value={profile.sector || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="Your sector (optional)"
-                  aria-label="Sector"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Profile Picture URL"
-                  name="profilePicture"
-                  value={profile.profilePicture || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="URL to your profile picture (optional)"
-                  aria-label="Profile Picture URL"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Sectional Head Name"
-                  name="sectionalHeadName"
-                  value={profile.sectionalHeadName || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="Sectional Head’s name (optional)"
-                  aria-label="Sectional Head Name"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Departmental Head Name"
-                  name="departmentalHeadName"
-                  value={profile.departmentalHeadName || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="Departmental Head’s name (optional)"
-                  aria-label="Departmental Head Name"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="HR Director Name"
-                  name="HRDirectorName"
-                  value={profile.HRDirectorName || ""}
-                  onChange={handleChange}
-                  sx={{ mb: 2 }}
-                  helperText="HR Director’s name (optional)"
-                  aria-label="HR Director Name"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  sx={{ mt: 2, borderRadius: 2, padding: "8px 24px" }}
-                  disabled={submitting}
-                  aria-label="Update Profile"
-                >
-                  {submitting ? "Updating..." : "Update Profile"}
-                </Button>
-              </Grid>
-            </Grid>
-          </form>
+          
+          <ProfileTable profile={profile} />
         </Paper>
       </MainContent>
     </div>

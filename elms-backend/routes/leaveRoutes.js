@@ -779,7 +779,7 @@ router.get("/stats", verifyToken, hasRole(["Supervisor", "SectionalHead", "Depar
 });
 
 // Search Leaves (for SuperAdminDashboard)
-router.get("/search", verifyToken, hasRole(["Admin"]), async (req, res) => {
+router.get("/search", verifyToken, hasRole(["Admin", "Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector"]), async (req, res) => {
   try {
     const { employeeName, leaveType, status } = req.query;
     const query = {};
@@ -801,6 +801,63 @@ router.get("/search", verifyToken, hasRole(["Admin"]), async (req, res) => {
   }
 });
 
+router.post('/bulk-action', async (req, res) => {
+  try {
+    const { leaveIds, action } = req.body;
+    if (!['APPROVE', 'REJECT'].includes(action)) {
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+    const status = action === 'APPROVE' ? 'Approved' : 'Rejected';
+    await Leave.updateMany(
+      { _id: { $in: leaveIds } },
+      { status }
+    );
+    res.json({ message: `Leaves ${action.toLowerCase()}d successfully` });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
+router.get('/approved', verifyToken, async (req, res) => {
+  try {
+    const { sector, month } = req.query;
+    const userSector = req.user.role === 'Admin' ? null : (sector || req.user.sector);
+    const matchConditions = { status: 'Approved' };
+
+    // If month is provided, filter leaves by the specified month
+    if (month) {
+      const [year, monthNum] = month.split('-');
+      const startDate = new Date(year, monthNum - 1, 1);
+      const endDate = new Date(year, monthNum, 0);
+      matchConditions.startDate = { $gte: startDate, $lte: endDate };
+    }
+
+    // Fetch approved leaves from ShortLeave and AnnualLeave collections
+    let shortLeaves = await ShortLeave.find(matchConditions).populate('employeeId', 'name sector');
+    let annualLeaves = await AnnualLeave.find(matchConditions).populate('employeeId', 'name sector');
+
+    // Combine leaves from both collections
+    let allLeaves = [...shortLeaves, ...annualLeaves];
+
+    // Filter by sector if provided (for standard users)
+    if (userSector) {
+      allLeaves = allLeaves.filter(leave => leave.employeeId && leave.employeeId.sector === userSector);
+    }
+
+    // Format the response with necessary fields
+    const formattedLeaves = allLeaves.map(leave => ({
+      employeeName: leave.employeeId?.name || 'Unknown',
+      leaveType: leave.leaveType || (leave instanceof ShortLeave ? 'Short Leave' : 'Annual Leave'),
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      status: leave.status
+    }));
+
+    res.status(200).json(formattedLeaves);
+  } catch (error) {
+    console.error('Error fetching approved leaves:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
 
 module.exports = router;
