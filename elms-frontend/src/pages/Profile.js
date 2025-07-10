@@ -104,16 +104,6 @@ export const ProfileTable = ({ profile }) => {
             <Grid item xs={12} sm={6}>
               <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
                 <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
-                  Supervisor
-                </Typography>
-                <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                  {profile?.supervisorName || "N/A"}
-                </Typography>
-                </Box>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
-                <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
                   Person Number
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 500 }}>
@@ -134,10 +124,10 @@ export const ProfileTable = ({ profile }) => {
             <Grid item xs={12} sm={6}>
               <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
                 <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
-                  Sector
+                  Directorate
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                  {profile?.sector || "N/A"}
+                  {profile?.directorate || "N/A"}
                 </Typography>
               </Box>
             </Grid>
@@ -154,10 +144,10 @@ export const ProfileTable = ({ profile }) => {
             <Grid item xs={12} sm={6}>
               <Box sx={{ p: 2, backgroundColor: "#f5f5f5", borderRadius: 1, minHeight: 100 }}>
                 <Typography variant="subtitle1" sx={{ color: "#666", mb: 1 }}>
-                  Sectional Head
+                  Director
                 </Typography>
                 <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                  {profile?.sectionalHeadName || "N/A"}
+                  {profile?.directorName || "N/A"}
                 </Typography>
               </Box>
             </Grid>
@@ -198,11 +188,10 @@ const Profile = () => {
     phoneNumber: "",
     profilePicture: "",
     chiefOfficerName: "",
-    supervisorName: "",
     personNumber: "",
     email: "",
-    sector: "",
-    sectionalHeadName: "",
+    directorate: "",
+    directorName: "",
     departmentalHeadName: "",
     HRDirectorName: "",
   });

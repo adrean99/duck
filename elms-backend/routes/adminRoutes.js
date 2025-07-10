@@ -6,6 +6,7 @@ const ShortLeave = require("../models/ShortLeave");
 const AnnualLeave = require("../models/AnnualLeave");
 const multer = require("multer");
 const path = require("path");
+const { logAction } = require("../utils/auditLogger");
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -33,7 +34,7 @@ const upload = multer({
 });
 
 // Get admin profile
-router.get("/profile", verifyToken, hasRole(["SectionalHead", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
+router.get("/profile", verifyToken, hasRole(["Director", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) {
@@ -47,7 +48,7 @@ router.get("/profile", verifyToken, hasRole(["SectionalHead", "DepartmentalHead"
 });
 
 // Update admin profile with file upload
-router.put("/profile", verifyToken, hasRole(["SectionalHead", "DepartmentalHead", "HRDirector", "Admin"]), upload.single("profilePicture"), async (req, res) => {
+router.put("/profile", verifyToken, hasRole(["Director", "DepartmentalHead", "HRDirector", "Admin"]), upload.single("profilePicture"), async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) {
@@ -60,10 +61,9 @@ router.put("/profile", verifyToken, hasRole(["SectionalHead", "DepartmentalHead"
       department: req.body.department,
       phoneNumber: req.body.phoneNumber,
       chiefOfficerName: req.body.chiefOfficerName,
-      supervisorName: req.body.supervisorName,
       personNumber: req.body.personNumber,
-      sector: req.body.sector,
-      sectionalHeadName: req.body.sectionalHeadName,
+      directorate: req.body.directorate,
+      directorName: req.body.directorName,
       departmentalHeadName: req.body.departmentalHeadName,
       HRDirectorName: req.body.HRDirectorName,
     };
@@ -73,6 +73,7 @@ router.put("/profile", verifyToken, hasRole(["SectionalHead", "DepartmentalHead"
     }
 
     const updatedUser = await User.findByIdAndUpdate(req.user.id, updates, { new: true });
+     logAction("Updated admin profile", req.user, { userId: req.user.id, updates });
     res.status(200).json({ profile: updatedUser });
   } catch (error) {
     console.error("Error updating admin profile:", error);
@@ -81,7 +82,7 @@ router.put("/profile", verifyToken, hasRole(["SectionalHead", "DepartmentalHead"
 });
 
 // Get leaves for admin dashboard
-router.get("/leaves", verifyToken, hasRole(["SectionalHead", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
+router.get("/leaves", verifyToken, hasRole(["Director", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
   try {
     const { leaveType } = req.query;
     if (!leaveType) {
@@ -105,7 +106,7 @@ router.get("/leaves", verifyToken, hasRole(["SectionalHead", "DepartmentalHead",
 });
 
 // Update leave status
-router.patch("/leaves/:id", verifyToken, hasRole(["Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
+router.patch("/leaves/:id", verifyToken, hasRole(["Director", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
   try {
     const leaveId = req.params.id;
     const updates = req.body;
@@ -121,10 +122,9 @@ router.patch("/leaves/:id", verifyToken, hasRole(["Supervisor", "SectionalHead",
       return res.status(404).json({ error: "Leave not found" });
     }
 
-    // Role-based update restrictions (aligned with leaveRoutes.js)
+    // Role-based update restrictions
     const allowedUpdates = {
-      Supervisor: ["SupervisorRecommendation", "supervisorDate"],
-      SectionalHead: ["sectionalHeadRecommendation", "sectionalHeadDate"],
+      Director: ["directorRecommendation", "directorDate"],
       DepartmentalHead: [
         "departmentalHeadRecommendation",
         "departmentalHeadDate",
@@ -133,18 +133,18 @@ router.patch("/leaves/:id", verifyToken, hasRole(["Supervisor", "SectionalHead",
         "departmentalHeadLastDate",
         "departmentalHeadResumeDate",
       ],
-      HRDirector: ["approverRecommendation", "approverDate"],
+      HRDirector: ["HRDirectorRecommendation", "HRDirectorDate"],
       Admin: [
-        "sectionalHeadRecommendation",
-        "sectionalHeadDate",
+        "directorRecommendation",
+        "directorDate",
         "departmentalHeadRecommendation",
         "departmentalHeadDate",
         "departmentalHeadDaysGranted",
         "departmentalHeadStartDate",
         "departmentalHeadLastDate",
         "departmentalHeadResumeDate",
-        "approverRecommendation",
-        "approverDate",
+        "HRDirectorRecommendation",
+        "HRDirectorDate",
       ],
     };
 
@@ -154,8 +154,8 @@ router.patch("/leaves/:id", verifyToken, hasRole(["Supervisor", "SectionalHead",
       return res.status(403).json({ error: `Role ${userRole} not authorized to update leave` });
     }
 
-    if (isShortLeave && !["Supervisor", "HRDirector", "Admin"].includes(userRole)) {
-      return res.status(403).json({ error: "Only Supervisor, HRDirector, or Admin can update Short Leave" });
+    if (isShortLeave && !["Director", "HRDirector", "Admin"].includes(userRole)) {
+      return res.status(403).json({ error: "Only Director, HRDirector, or Admin can update Short Leave" });
     }
 
     // Filter updates to only allowed fields
@@ -170,13 +170,21 @@ router.patch("/leaves/:id", verifyToken, hasRole(["Supervisor", "SectionalHead",
       return res.status(400).json({ error: "No valid fields provided for update" });
     }
 
-    if ((userRole === "HRDirector" || userRole === "Admin") && "approverRecommendation" in filteredUpdates) {
+    // Prevent duplicate Director actions
+    if (userRole === "Director" && (leave.directorRecommendation || leave.directorDate)) {
+      return res.status(400).json({ error: "Director has already approved or rejected this leave" });
+    }
+
+    // Update status based on HRDirector or Admin approval
+    if ((userRole === "HRDirector" || userRole === "Admin") && "HRDirectorRecommendation" in filteredUpdates) {
       filteredUpdates.status = filteredUpdates.approverRecommendation === "Approved" ? "Approved" : "Rejected";
     }
 
+    // Apply updates
     Object.assign(leave, filteredUpdates);
     await leave.save();
 
+    logAction("Updated leave status", req.user, { leaveId, updates: filteredUpdates });
     res.status(200).json(leave);
   } catch (error) {
     console.error("Error updating leave:", error);
@@ -185,7 +193,7 @@ router.patch("/leaves/:id", verifyToken, hasRole(["Supervisor", "SectionalHead",
 });
 
 // Get all leaves for calendar
-router.get("/all", verifyToken, hasRole(["SectionalHead", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
+router.get("/all", verifyToken, hasRole(["Director", "DepartmentalHead", "HRDirector", "Admin"]), async (req, res) => {
   try {
     // Fetch leaves from both collections
     const shortLeaves = await ShortLeave.find();

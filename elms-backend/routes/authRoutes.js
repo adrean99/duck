@@ -2,10 +2,11 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const Profile = require("../models/Profile");
-const { verifyToken, isAdmin, isSectionalHead, isDepartmentalHead, isHRDirector } = require("../middleware/authMiddleware");
+const { verifyToken, hasRole } = require("../middleware/authMiddleware");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin019"; 
+const { logAction } = require("../utils/auditLogger");
 
 // USER REGISTRATION
 router.post("/register", async (req, res) => {
@@ -27,7 +28,8 @@ router.post("/register", async (req, res) => {
     // Save user
     const newUser = new User({ name, email, password: hashedPassword,  role: "Employee", department: department || "N/A", });
     await newUser.save();
-
+   
+    logAction("Registered user", null, { userId: newUser._id, email, role: "Employee" });
     res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
     console.error("Registration error:", error);
@@ -65,7 +67,7 @@ router.post("/admin/login", async (req, res) => {
       process.env.JWT_SECRET || "your_jwt_secret",
       { expiresIn: "1h" }
     );
-
+     logAction("Admin logged in", user, { userId: user._id, email });
     res.status(200).json({ token, user: { id: user._id, role: user.role, email: user.email } });
   } catch (error) {
     console.error("Error in admin login:", error);
@@ -84,18 +86,18 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
    
-    let sector = user.sector;
-    if (!sector) {
+    let directorate = user.directorate;
+    if (!directorate) {
       const profile = await Profile.findOne({ userId: user._id });
-      sector = profile ? profile.sector : null;
-      if (!sector) {
-        return res.status(400).json({ error: 'User sector is not defined in profile. Please update your profile.' });
+      directorate = profile ? profile.directorate : null;
+      if (!directorate) {
+        return res.status(400).json({ error: 'User directorate is not defined in profile. Please update your profile.' });
       }
     }
     // Generate JWT Token
-    const token = jwt.sign({ id: user._id, role: user.role, sector }, process.env.JWT_SECRET, { expiresIn: "1h" });
-
-    res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, sector, } });
+    const token = jwt.sign({ id: user._id, role: user.role, directorate }, process.env.JWT_SECRET, { expiresIn: "1h" });
+     logAction("User logged in", user, { userId: user._id, email, role: user.role });
+    res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, directorate, } });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Server error" });
@@ -103,14 +105,17 @@ router.post("/login", async (req, res) => {
 });
 
 // PROTECTED ROUTE - ADMIN DASHBOARD
-router.get("/admin-dashboard", verifyToken, isSectionalHead, isDepartmentalHead, isAdmin, isHRDirector, (req, res) => {
+router.get("/admin-dashboard", verifyToken, hasRole(["Director", "DepartmentalHead", "HRDirector", "Admin"]), (req, res) => {
+  logAction("Accessed admin dashboard", req.user, {});
   res.json({ msg: "Welcome to Admin Dashboard!" });
 });
 
 // PROTECTED ROUTE - EMPLOYEE DASHBOARD
 router.get("/employee-dashboard", verifyToken, (req, res) => {
+  logAction("Accessed employee dashboard", req.user, {});
   res.json({ msg: "Welcome to Employee Dashboard!" });
 });
+
 
 
 module.exports = router;

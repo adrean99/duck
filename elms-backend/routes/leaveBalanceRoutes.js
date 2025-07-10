@@ -2,8 +2,8 @@ const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middleware/authMiddleware");
 const LeaveBalance = require("../models/LeaveBalance");
-const ShortLeave = require("../models/ShortLeave"); // Import ShortLeave
-const AnnualLeave = require("../models/AnnualLeave"); // Import AnnualLeave
+const ShortLeave = require("../models/ShortLeave"); 
+const AnnualLeave = require("../models/AnnualLeave"); 
 
 // Get user's leave balance
 router.get("/", verifyToken, async (req, res) => {

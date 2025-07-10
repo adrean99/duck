@@ -1,45 +1,49 @@
 import { createContext, useState, useEffect } from "react";
 
-
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [authState, setAuthState] = useState(() => {
     const token = localStorage.getItem("token");
-    const user = localStorage.getItem("user");
-    return {
-      token: token ? token : null,
-      user: user ? JSON.parse(user) : null,
-    };
+    let user = null;
+    try {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        user = JSON.parse(storedUser);
+      }
+    } catch (error) {
+      console.error("Failed to parse user from localStorage:", error);
+      localStorage.removeItem("user");
+    }
+    return { token: token || null, user };
   });
-  
-  const [notifications, setNotifications] = useState([]);
 
-  
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
   const login = (newToken, userData) => {
-    console.log("🔐 Logging in with token:", newToken, "User:", userData);
-    setAuthState({ token: newToken, user: userData });
+    if (!newToken) throw new Error("Token is required for login");
+    const updatedAuthState = { token: newToken, user: userData || null };
+    setAuthState(updatedAuthState);
     localStorage.setItem("token", newToken);
-    localStorage.setItem("user", JSON.stringify(userData));
-    
+    localStorage.setItem("user", JSON.stringify(userData || null));
   };
 
   const logout = () => {
-    console.log("🚪 Logging out...");
     setAuthState({ token: null, user: null });
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    
   };
 
   useEffect(() => {
-    console.log("AuthContext state updated:", authState);
+    setIsAuthReady(true);
   }, [authState]);
 
-  console.log("AuthContext rendering with:", authState);
+  if (!isAuthReady) {
+    return <div>Loading authentication...</div>;
+  }
 
   return (
-    <AuthContext.Provider value={{  authState, notifications, login, logout }}>
+    <AuthContext.Provider value={{ authState, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

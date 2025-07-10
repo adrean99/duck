@@ -9,7 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
 import LeaveRoster from "./components/LeaveRoster";
 import Notifications from "./components/Notifications";
-
+import AddUser from "./components/AddUser";
 
 //import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
@@ -71,13 +71,14 @@ function App() {
           <Route path="/register" element={<Register />} />
 
           {/* Private Routes */}
-          <Route path="/dashboard" element={<PrivateRoute allowedRoles={["Employee", "SectionalHead", "DepartmentalHead", "HRDirector", "Admin"]}><Dashboard /></PrivateRoute>} />
+          <Route path="/dashboard" element={<PrivateRoute allowedRoles={["Employee", "Director", "DepartmentalHead", "HRDirector", "Admin"]}><Dashboard /></PrivateRoute>} />
           <Route path="/employee-dashboard" element={<PrivateRoute allowedRoles={["Employee"]}><EmployeeDashboard /></PrivateRoute>} />
           <Route path="/leave-roster" element={<LeaveRoster />} />
           <Route path="/notifications" element={<Notifications />} />
-          <Route path="/profile" element={<PrivateRoute allowedRoles={["Employee", "Admin", "SectionalHead", "DepartmentalHead", "HRDirector"]}><Profile /></PrivateRoute>} />
-          <Route path="/admin-dashboard" element={<PrivateRoute allowedRoles={["Supervisor", "Admin", "SectionalHead", "DepartmentalHead", "HRDirector"]}><AdminDashboard /></PrivateRoute>} />
+          <Route path="/profile" element={<PrivateRoute allowedRoles={["Employee", "Admin", "Director", "DepartmentalHead", "HRDirector"]}><Profile /></PrivateRoute>} />
+          <Route path="/admin-dashboard" element={<PrivateRoute allowedRoles={["Admin", "Director", "DepartmentalHead", "HRDirector"]}><AdminDashboard /></PrivateRoute>} />
           <Route path="/super-admin-dashboard" element={<PrivateRoute allowedRoles={["Admin"]}><SuperAdminDashboard /></PrivateRoute>} />
+          <Route path="/add-user" element={<PrivateRoute allowedRoles={["Admin"]}><AddUser /></PrivateRoute>} />
           
           {/* Leave Calendar (Assumed Accessible to All) */}
           <Route path="/leave-calendar" element={<LeaveCalendar />} />

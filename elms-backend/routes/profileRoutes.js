@@ -1,5 +1,5 @@
 const express = require("express");
-const { verifyToken}  = require("../middleware/authMiddleware"); // Protect routes
+const { verifyToken}  = require("../middleware/authMiddleware"); 
 const router = express.Router();
 const Profile = require("../models/Profile");
 const User = require('../models/User');
@@ -10,7 +10,7 @@ router.get('/profile/:id', verifyToken, async (req, res) => {
     if (!profile) {
       return res.status(404).json({ error: 'Profile not found' });
     }
-    res.status(200).json({ sector: profile.sector });
+    res.status(200).json({ directorate: profile.directorate });
   } catch (error) {
     console.error('Error fetching profile:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
@@ -43,11 +43,10 @@ router.get('/profiles', async (req, res) => {
       phoneNumber: user.phoneNumber || '',
       profilePicture: user.profilePicture || '',
       chiefOfficerName: user.chiefOfficerName || '',
-      supervisorName: user.supervisorName || '',
       personNumber: user.personNumber || '',
       email: user.email,
-      sector: user.sector || '',
-      sectionalHeadName: user.sectionalHeadName || '',
+      directorate: user.directorate || '',
+      directorName: user.directorName || '',
       departmentalHeadName: user.departmentalHeadName || '',
       HRDirectorName: user.HRDirectorName || ''
     });
@@ -68,11 +67,10 @@ router.get("/", verifyToken, async (req, res) => {
         phoneNumber: "",
         profilePicture: "",
         chiefOfficerName: "",
-        supervisorName: "",
         personNumber: "",
         email: "",
-        sector: "",
-        sectionalHeadName:"",
+        directorate: "",
+        directorName:"",
         departmentHeadName:"",
         HRDirectorName:"",
       };
@@ -87,7 +85,7 @@ router.get("/", verifyToken, async (req, res) => {
 
 router.put("/", verifyToken, async (req, res) => {
   try {
-    const { name, department, phoneNumber, profilePicture, chiefOfficerName, supervisorName, personNumber, email, sector, sectionalHeadName, departmentalHeadName, HRDirectorName } = req.body;
+    const { name, department, phoneNumber, profilePicture, chiefOfficerName, personNumber, email, directorate, directorName, departmentalHeadName, HRDirectorName } = req.body;
 
     const updateData = {};
     if (name) updateData.name = name;
@@ -95,11 +93,10 @@ router.put("/", verifyToken, async (req, res) => {
     if (phoneNumber) updateData.phoneNumber = phoneNumber;
     if (profilePicture) updateData.profilePicture = profilePicture;
     if (chiefOfficerName) updateData.chiefOfficerName = chiefOfficerName;
-    if (supervisorName) updateData.supervisorName = supervisorName;
     if (personNumber) updateData.personNumber = personNumber;
     if (email) updateData.email = email;
-    if (sector) updateData.sector = sector;
-    if (sectionalHeadName) updateData.sectionalHeadName = sectionalHeadName;
+    if (directorate) updateData.directorate = directorate;
+    if (directorName) updateData.directorName = directorName;
     if (departmentalHeadName) updateData.departmentalHeadName = departmentalHeadName;
     if (HRDirectorName) updateData.HRDirectorName = HRDirectorName;
 
@@ -120,11 +117,10 @@ router.put("/", verifyToken, async (req, res) => {
         phoneNumber,
         profilePicture,
         chiefOfficerName,
-        supervisorName,
         personNumber,
         email: email || "",
-        sector,
-        sectionalHeadName,
+        directorate,
+        directorName,
         departmentalHeadName,
         HRDirectorName,
       });

@@ -3,9 +3,11 @@ import apiClient from "../utils/apiClient";
 import { io } from "socket.io-client";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWeekend } from "date-fns";
 
-const LeaveRoster = () => {
+const LeaveRoster = ({ selectedDirectorate, selectedDepartment }) => {
   const [roster, setRoster] = useState(null);
-  const [sectorRosters, setSectorRosters] = useState([]);
+  const [rosterData, setRosterData] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [directorateRosters, setDirectorateRosters] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [employeesLeaves, setEmployeesLeaves] = useState([]);
   const [newPeriod, setNewPeriod] = useState({
@@ -21,7 +23,7 @@ const LeaveRoster = () => {
   const fetchUserProfile = async () => {
     try {
       const response = await apiClient.get(`/api/profile/${user.id}`);
-      const updatedUser = { ...user, sector: response.data.sector };
+      const updatedUser = { ...user, directorate: response.data.directorate };
       setUser(updatedUser);
       localStorage.setItem("user", JSON.stringify(updatedUser));
     } catch (err) {
@@ -31,27 +33,31 @@ const LeaveRoster = () => {
 
   const fetchRoster = async () => {
     try {
-      const response = await apiClient.get(`/api/leave-roster/${user.id}`);
+      const response = await apiClient.get(`/api/leave-roster/employee/${user.id}`);
       setRoster(response.data);
     } catch (err) {
       setError(err.response?.data?.error || "Failed to fetch roster");
     }
   };
 
-  const fetchSectorRosters = async () => {
+  const fetchDirectorateRosters = async (directorateFilter = user.directorate, deptFilter = null) => {
     try {
-      if (!user.sector) return;
-      const response = await apiClient.get(`/api/leave-roster/sector/${user.sector}`);
-      console.log("Fetched sector rosters:", response.data); // Debug log
-      setSectorRosters(response.data);
+      if (!directorateFilter && !["Admin"].includes(user.role)) return;
+      const endpoint = `/api/leave-roster/directorate/${directorateFilter || ""}`;
+      const response = await apiClient.get(endpoint, {
+        params: { department: deptFilter || undefined }
+      });
+      console.log("Fetched directorate rosters:", response.data); // Debug log
+      setDirectorateRosters(response.data);
     } catch (err) {
-      setError(err.response?.data?.error || "Failed to fetch sector rosters");
+      setError(err.response?.data?.error || "Failed to fetch directorate rosters");
     }
   };
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = async (directorateFilter = user.directorate, deptFilter = null) => {
     try {
-      const response = await apiClient.get(`/api/users/sector`);
+      const endpoint = `/api/users/directorate${directorateFilter ? `?directorate=${directorateFilter}` : ""}${deptFilter ? `&department=${deptFilter}` : ""}`;
+      const response = await apiClient.get(endpoint);
       console.log("Fetched employees:", response.data); // Debug log
       setEmployees(response.data);
     } catch (err) {
@@ -59,17 +65,30 @@ const LeaveRoster = () => {
     }
   };
 
-  const fetchEmployeesLeaves = async () => {
+  const fetchEmployeesLeaves = async (directorateFilter = user.directorate, deptFilter = null) => {
     try {
-      if (!user.sector) return;
+      if (!directorateFilter && !["Admin"].includes(user.role)) return;
       const monthString = `${selectedYear}-${String(selectedMonth).padStart(2, "0")}`;
-      const endpoint = user.role === "Admin"
-        ? `/api/leaves/approved?month=${monthString}`
-        : `/api/leaves/approved?sector=${user.sector}&month=${monthString}`;
+      const endpoint = `/api/leaves/approved?month=${monthString}${directorateFilter ? `&directorate=${directorateFilter}` : ""}${deptFilter ? `&department=${deptFilter}` : ""}`;
       const response = await apiClient.get(endpoint);
       setEmployeesLeaves(response.data);
     } catch (err) {
       setError(err.response?.data?.error || "Failed to fetch leaves for roster");
+    }
+  };
+
+  const fetchRosterData = async () => {
+    setIsLoading(true);
+    try {
+      const response = await apiClient.get("/api/leave-roster/directorate/:directorate", {
+        params: { sector: selectedDirectorate || "", department: selectedDepartment || "" },
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      setRosterData(response.data);
+    } catch (error) {
+      console.error("Error fetching roster data:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -78,7 +97,7 @@ const LeaveRoster = () => {
     try {
       await apiClient.post(`/api/leave-roster/suggest/${user.id}`, newPeriod);
       fetchRoster();
-      fetchSectorRosters();
+      fetchDirectorateRosters(selectedDirectorate || user.directorate, selectedDepartment);
       setNewPeriod({ startDate: "", endDate: "", leaveType: "Annual Leave" });
     } catch (err) {
       setError(err.response?.data?.error || "Failed to suggest period");
@@ -89,7 +108,7 @@ const LeaveRoster = () => {
     try {
       await apiClient.patch(`/api/leave-roster/update-period/${roster._id}/${periodId}`, { status });
       fetchRoster();
-      fetchSectorRosters();
+      fetchDirectorateRosters(selectedDirectorate || user.directorate, selectedDepartment);
     } catch (err) {
       setError(err.response?.data?.error || "Failed to update period");
     }
@@ -99,21 +118,22 @@ const LeaveRoster = () => {
     try {
       await apiClient.post(`/api/leave-roster/apply-from-roster/${roster._id}/${periodId}`);
       fetchRoster();
-      fetchSectorRosters();
-      fetchEmployeesLeaves();
+      fetchDirectorateRosters(selectedDirectorate || user.directorate, selectedDepartment);
+      fetchEmployeesLeaves(selectedDirectorate || user.directorate, selectedDepartment);
     } catch (err) {
       setError(err.response?.data?.error || "Failed to apply leave");
     }
   };
 
   useEffect(() => {
-    if (!user.sector) {
+    if (!user.directorate) {
       fetchUserProfile();
     } else {
       fetchRoster();
-      fetchSectorRosters();
-      fetchEmployees();
-      fetchEmployeesLeaves();
+      fetchRosterData();
+      fetchDirectorateRosters(selectedDirectorate || user.directorate, selectedDepartment);
+      fetchEmployees(selectedDirectorate || user.directorate, selectedDepartment);
+      fetchEmployeesLeaves(selectedDirectorate || user.directorate, selectedDepartment);
     }
 
     const token = localStorage.getItem("token");
@@ -126,31 +146,31 @@ const LeaveRoster = () => {
 
     socket.on("connect", () => {
       console.log("WebSocket connected");
-      if (user.sector) {
-        socket.emit("joinSector", user.sector); // Join sector-specific room
+      if (user.directorate) {
+        socket.emit("joinDirectorate", user.directorate);
       }
     });
 
     socket.on("rosterUpdate", (data) => {
       console.log("Roster update received:", data);
-      if (data.sector === user.sector) {
-        fetchSectorRosters();
+      if (data.directorate === (selectedDirectorate || user.directorate)) {
+        fetchDirectorateRosters(selectedDirectorate || user.directorate, selectedDepartment);
         if (data.employeeId === user.id) fetchRoster();
       }
     });
 
     socket.on("leaveStatusUpdate", () => {
-      fetchEmployeesLeaves();
+      fetchEmployeesLeaves(selectedDirectorate || user.directorate, selectedDepartment);
     });
 
     return () => socket.disconnect();
-  }, [user.id, user.sector]);
+  }, [user.id, user.directorate, selectedDirectorate, selectedDepartment]);
 
   useEffect(() => {
-    if (!user.sector) return;
-    fetchEmployeesLeaves();
-    fetchSectorRosters();
-  }, [selectedMonth, selectedYear, user.sector]);
+    if (!user.directorate) return;
+    fetchEmployeesLeaves(selectedDirectorate || user.directorate, selectedDepartment);
+    fetchDirectorateRosters(selectedDirectorate || user.directorate, selectedDepartment);
+  }, [selectedMonth, selectedYear, user.directorate, selectedDirectorate, selectedDepartment]);
 
   const months = [
     "January", "February", "March", "April", "May", "June",
@@ -169,11 +189,11 @@ const LeaveRoster = () => {
       case "Annual Leave":
       case "Short Leave": return "L";
       case "Emergency Leave":
-      case "Compassionate": return "C";
+      case "Compassionate Leave": return "C";
       case "Maternity Leave": return "P";
-      case "Terminal": return "T";
-      case "Sports": return "S";
-      case "Unpaid": return "U";
+      case "Terminal Leave": return "T";
+      case "Sports Leave": return "S";
+      case "Unpaid Leave": return "U";
       default: return "";
     }
   };
@@ -183,11 +203,11 @@ const LeaveRoster = () => {
       case "Annual Leave":
       case "Short Leave": return "#28a745";
       case "Emergency Leave":
-      case "Compassionate": return "#ffc107";
+      case "Compassionate Leave": return "#ffc107";
       case "Maternity Leave": return "#007bff";
-      case "Terminal": return "#ff6347";
-      case "Sports": return "#20b2aa";
-      case "Unpaid": return "#a9a9a9";
+      case "Terminal Leave": return "#ff6347";
+      case "Sports Leave": return "#20b2aa";
+      case "Unpaid Leave": return "#a9a9a9";
       default: return "transparent";
     }
   };
@@ -230,7 +250,7 @@ const LeaveRoster = () => {
                end.getMonth() + 1 === selectedMonth && end.getFullYear() === selectedYear;
       });
 
-      console.log(`Suggested leaves for employee ${employeeId}:`, filteredSuggestedLeaves); // Debug log
+      console.log(`Suggested leaves for employee ${employeeId}:`, filteredSuggestedLeaves);
 
       filteredSuggestedLeaves.forEach((period) => {
         const start = new Date(period.startDate);
@@ -262,7 +282,7 @@ const LeaveRoster = () => {
 
   return (
     <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Leave Roster for {user.role === "Admin" ? "All Employees" : `${user.sector || "undefined"} Sector`}</h2>
+      <h2 className="text-2xl font-bold mb-4">Leave Roster for {user.role === "Admin" ? "All Employees" : `${user.directorate || "undefined"} Directorate`}</h2>
       {error && <div className="text-red-500 mb-4">{error}</div>}
 
       {/* Calendar View */}
@@ -312,18 +332,14 @@ const LeaveRoster = () => {
               {employees.length > 0 ? (
                 employees.map((employee) => {
                   const employeeLeaves = groupedLeaves[employee.name] || [];
-                  const employeeRoster = sectorRosters.find(r => {
-                    const match = r.employeeId._id.toString() === employee._id.toString();
-                    console.log(`Matching employee ${employee._id} with roster employee ${r.employeeId._id}: ${match}`);
-                    return match;
-                  });
+                  const employeeRoster = directorateRosters.find(r => r.employeeId._id.toString() === employee._id.toString());
                   const suggestedLeaves = employeeRoster ? employeeRoster.periods : [];
                   const leaveDays = getEmployeeLeaveDays(employeeLeaves, suggestedLeaves, getDaysArray(), employee._id);
 
                   return (
                     <tr key={employee._id} className="border">
                       <td className="border p-2 sticky left-0 bg-white min-w-[150px]">
-                        {employee.name} ({employee.sector})
+                        {employee.name} ({employee.directorate}, {employee.department})
                       </td>
                       {getDaysArray().map((day, index) => {
                         const dayInfo = leaveDays[index + 1];
@@ -348,7 +364,7 @@ const LeaveRoster = () => {
               ) : (
                 <tr>
                   <td colSpan={getDaysArray().length + 1} className="border p-2 text-center">
-                    No employees found in this sector
+                    No employees found in this {user.role === "Admin" ? "directorate/department" : "directorate"}
                   </td>
                 </tr>
               )}
@@ -431,10 +447,10 @@ const LeaveRoster = () => {
               <option value="Short Leave">Short Leave</option>
               <option value="Emergency Leave">Emergency Leave</option>
               <option value="Maternity Leave">Maternity Leave</option>
-              <option value="Terminal">Terminal</option>
-              <option value="Compassionate">Compassionate</option>
-              <option value="Sports">Sports</option>
-              <option value="Unpaid">Unpaid</option>
+              <option value="Terminal Leave">Terminal Leave</option>
+              <option value="Compassionate Leave">Compassionate Leave</option>
+              <option value="Sports Leave">Sports Leave</option>
+              <option value="Unpaid Leave">Unpaid Leave</option>
             </select>
           </div>
           <div className="col-span-3">
@@ -469,7 +485,7 @@ const LeaveRoster = () => {
                   <td className="border p-2">{period.status}</td>
                   <td className="border p-2">{period.suggestedBy}</td>
                   <td className="border p-2">
-                    {period.status === "Suggested" && ["Supervisor", "HRDirector", "Admin"].includes(user.role) && (
+                    {period.status === "Suggested" && ["Director", "HRDirector", "Admin"].includes(user.role) && (
                       <>
                         <button
                           onClick={() => handleUpdatePeriod(period._id, "Confirmed")}

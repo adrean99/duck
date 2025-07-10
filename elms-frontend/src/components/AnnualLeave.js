@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import {
   AppBar,
   Toolbar,
-  Container,
   TextField,
   Button,
   Typography,
@@ -60,7 +59,7 @@ const AnnualLeave = () => {
   const [employeeName, setEmployeeName] = useState("");
   const [personNumber, setPersonNumber] = useState("");
   const [department, setDepartment] = useState("");
-  const [sector, setSector] = useState("");
+  const [directorate, setDirectorate] = useState("");
   const [daysApplied, setDaysApplied] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -68,7 +67,7 @@ const AnnualLeave = () => {
   const [emailAddress, setEmailAddress] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [reason, setReason] = useState("");
-  const [sectionalHeadName, setSectionalHeadName] = useState("");
+  const [directorName, setDirectorName] = useState("");
   const [departmentalHeadName, setDepartmentalHeadName] = useState("");
   const [HRDirectorName, setHRDirectorName] = useState("");
   const [leaveBalance, setLeaveBalance] = useState({ leaveBalanceBF: 0, currentYearLeave: 0, leaveTakenThisYear: 0 });
@@ -105,10 +104,10 @@ const AnnualLeave = () => {
         setEmployeeName(profile.name || "");
         setPersonNumber(profile.personNumber || "");
         setDepartment(profile.department || "");
-        setSector(profile.sector || "");
+        setDirectorate(profile.directorate || "");
         setEmailAddress(profile.email || "");
         setPhoneNumber(profile.phoneNumber || "");
-        setSectionalHeadName(profile.sectionalHeadName || "");
+        setDirectorName(profile.directorName || "");
         setDepartmentalHeadName(profile.departmentalHeadName || "");
         setHRDirectorName(profile.HRDirectorName || "");
 
@@ -128,7 +127,7 @@ const AnnualLeave = () => {
         console.log("Leave requests fetched:", leavesRes.data);
         setLeaveRequests(Array.isArray(leavesRes.data) ? leavesRes.data : []);
 
-        if (["SectionalHead", "DepartmentalHead", "HRDirector"].includes(effectiveUser.role)) {
+        if (["Director", "DepartmentalHead", "HRDirector"].includes(effectiveUser.role)) {
           const pendingRes = await apiClient.get("/api/leaves/pending-approvals", {
             headers: { Authorization: `Bearer ${effectiveToken}` },
           });
@@ -232,7 +231,7 @@ const AnnualLeave = () => {
           employeeName,
           personNumber,
           department,
-          sector,
+          directorate,
           daysApplied: Number(daysApplied),
           startDate,
           endDate,
@@ -243,7 +242,7 @@ const AnnualLeave = () => {
           leaveBalanceBF: leaveBalance.leaveBalanceBF,
           currentYearLeave: leaveBalance.currentYearLeave,
           leaveTakenThisYear: leaveBalance.leaveTakenThisYear,
-          sectionalHeadName,
+          directorName,
           departmentalHeadName,
           HRDirectorName,
         },
@@ -397,12 +396,12 @@ const AnnualLeave = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Sector"
-                  value={sector}
-                  onChange={(e) => setSector(e.target.value)}
+                  label="Directorate"
+                  value={directorate}
+                  onChange={(e) => setDirectorate(e.target.value)}
                   sx={{ mb: 2 }}
-                  helperText="Your sector (optional)"
-                  aria-label="Sector"
+                  helperText="Your directorate (optional)"
+                  aria-label="Directorate"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -548,12 +547,12 @@ const AnnualLeave = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Sectional Head Name"
-                  value={sectionalHeadName}
-                  onChange={(e) => setSectionalHeadName(e.target.value)}
+                  label="Director Name"
+                  value={directorName}
+                  onChange={(e) => setDirectorName(e.target.value)}
                   sx={{ mb: 2 }}
-                  helperText="Sectional Head’s name (optional)"
-                  aria-label="Sectional Head Name"
+                  helperText="Director’s name (optional)"
+                  aria-label="Director Name"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -608,14 +607,14 @@ const AnnualLeave = () => {
         <Box component="ul" sx={{ pl: 2 }}>
           <li>Maximum of 30 working days per request.</li>
           <li>Must be submitted at least 7 days in advance.</li>
-          <li>Requires approval from Sectional Head, Departmental Head, and HR Director.</li>
+          <li>Requires approval from Director, Departmental Head, and HR Director.</li>
           <li>Public Holidays, Saturdays, and Sundays are excluded; only working days count.</li>
           <li>Total annual leave capped at 30 days per year (including balance B/F and current year allocation).</li>
           <li>Total number of days brought forward is 15 days</li>
         </Box>
       </Paper>
 
-      {["SectionalHead", "DepartmentalHead", "HRDirector"].includes(effectiveUser.role) && (
+      {["Director", "DepartmentalHead", "HRDirector"].includes(effectiveUser.role) && (
         <Paper elevation={3} sx={{ p: 4, width: "100%", borderRadius: 0, boxSizing: "border-box", boxShadow: 5, mt: 2 }}>
           <Typography variant="h6" gutterBottom>Pending Annual Leave Approvals</Typography>
           <TableContainer sx={{ maxHeight: "calc(100vh - 300px)", overflow: "auto" }}>
@@ -690,13 +689,13 @@ const AnnualLeave = () => {
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Name</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>P/F No.</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Department</TableCell>
-                <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Sector</TableCell>
+                <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Directorate</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Days</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Start Date</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>End Date</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Reason</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Sectional Head</TableCell>
+                <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Director</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Dept. Head</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>HR Director</TableCell>
               </TableRow>
@@ -712,7 +711,7 @@ const AnnualLeave = () => {
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.employeeName}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.personNumber}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.department}</TableCell>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.sector || "N/A"}</TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.directorate || "N/A"}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.daysApplied}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDate(leave.startDate)}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{formatDate(leave.endDate)}</TableCell>
@@ -722,7 +721,7 @@ const AnnualLeave = () => {
                         {getStatusChip(leave.status)}
                       </Tooltip>
                     </TableCell>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.sectionalHeadName || "N/A"}</TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.directorName || "N/A"}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.departmentalHeadName || "N/A"}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.HRDirectorName || "N/A"}</TableCell>
                   </TableRow>

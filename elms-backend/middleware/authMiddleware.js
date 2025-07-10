@@ -39,9 +39,8 @@ const hasRole = (roles) => (req, res, next) => {
 };
 
 const isAdmin = hasRole(["Admin"]);
-const isSupervisor = hasRole(["Supervisor"]);
-const isSectionalHead = hasRole(["SectionalHead"]);
+const isDirector = hasRole(["Director"]);
 const isDepartmentalHead =hasRole(["DepartmentalHead"]);
 const isHRDirector = hasRole(["HRDirector"]);
 
-module.exports = { verifyToken, hasRole, isAdmin, isSupervisor, isSectionalHead,  isDepartmentalHead, isHRDirector };
+module.exports = { verifyToken, hasRole, isAdmin, isDirector,  isDepartmentalHead, isHRDirector };

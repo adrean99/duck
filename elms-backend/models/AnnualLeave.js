@@ -2,18 +2,18 @@ const mongoose = require("mongoose");
 
 const AnnualLeaveSchema = new mongoose.Schema({
   employeeId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  leaveType: { type: String, default: ["Annual Leave", "Maternity Leave"], required: true },
+  leaveType: { type: String, default: "Annual Leave", required: true },
   status: { 
     type: String, 
-    enum: ["Pending", "RecommendedBySectional", "RecommendedByDepartmental", "Approved", "Rejected"], 
+    enum: ["Pending", "RecommendedByDirector", "RecommendedByDepartmental", "Approved", "Rejected"], 
     default: "Pending"
   },
-  createdAt: { type: Date, default: Date.now },
+  currentApprover: { type: String, enum: ["Director", "DepartmentalHead", "HRDirector"], default: "Director" },
   submissionDate: { type: Date, default: Date.now },
   employeeName: { type: String, required: true },
   personNumber: { type: String, required: true },
   department: { type: String, required: true },
-  sector: { type: String },
+  directorate: { type: String },
   daysApplied: { type: Number, required: true },
   startDate: { type: Date, required: true },
   endDate: { type: Date, required: true },
@@ -30,28 +30,41 @@ const AnnualLeaveSchema = new mongoose.Schema({
   leaveBalanceCF: { type: Number },
   computedBy: { type: String },
   computedDate: { type: Date },
-  sectionalHeadName: String,
-  departmentalHeadName: String,
-  HRDirectorName: String,
+  directorName: { type: String },
+  departmentalHeadName: { type: String },
+  HRDirectorName: { type: String },
   approvals: [
     {
-      approverRole: String,
-      status: { type: String, default: "Pending" },
-      comment: String,
-      updatedAt: Date,
+      approverRole: { type: String, enum: ["Director", "DepartmentalHead", "HRDirector"], required: true },
+      status: { type: String, enum: ["Pending", "Approved", "Rejected"], default: "Pending" },
+      comment: { type: String },
+      updatedAt: { type: Date, default: Date.now },
     },
   ],
-  sectionalHeadRecommendation: { type: String, default: "Pending" },
-  sectionalHeadDate: String,
-  departmentalHeadRecommendation: { type: String, default: "Pending" },
-  departmentalHeadDate: String,
-  departmentalHeadDaysGranted: Number,
-  departmentalHeadStartDate: Date,
-  departmentalHeadLastDate: Date,
-  departmentalHeadResumeDate: Date,
-  approverRecommendation: { type: String, default: "Pending" },
-  approverDate: String,
-  status: { type: String, default: "Pending" },
-  createdAt: { type: Date, default: Date.now },
+  directorRecommendation: { type: String, enum: ["Pending", "Recommended", "Rejected"], default: "Pending" },
+  departmentalHeadRecommendation: { type: String, enum: ["Pending", "Recommended", "Rejected"], default: "Pending" },
+  approverRecommendation: { type: String, enum: ["Pending", "Recommended", "Rejected"], default: "Pending" },
+  directorDate: { type: Date },
+  departmentalHeadDate: { type: Date },
+  departmentalHeadDaysGranted: { type: Number },
+  departmentalHeadStartDate: { type: Date },
+  departmentalHeadLastDate: { type: Date },
+  departmentalHeadResumeDate: { type: Date },
+  approverDate: { type: Date },
+}, { timestamps: true });
+
+AnnualLeaveSchema.pre('save', function(next) {
+  if (this.isNew) {
+    this.approvals = [
+      { approverRole: "Director", status: "Pending" },
+      { approverRole: "DepartmentalHead", status: "Pending" },
+      { approverRole: "HRDirector", status: "Pending" },
+    ];
+    this.directorRecommendation = "Pending";
+    this.departmentalHeadRecommendation = "Pending";
+    this.approverRecommendation = "Pending";
+  }
+  next();
 });
+
 module.exports = mongoose.model("AnnualLeave", AnnualLeaveSchema);

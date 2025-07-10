@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import React, { useState, useEffect, useContext, useMemo } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import { useNavigate } from "react-router-dom";
@@ -7,9 +7,14 @@ import { io } from "socket.io-client";
 import {
   Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell, Button, Alert, Drawer, List, ListItem, ListItemText,
   IconButton, AppBar, Toolbar, Box, TableContainer, Chip, Divider, TextField, Grid, CircularProgress, Dialog, DialogTitle,
-  DialogContent, DialogActions, Input, Select, MenuItem, FormControlLabel, Checkbox
+  DialogContent, DialogActions, Input, Select, MenuItem, FormControlLabel, Checkbox, Collapse
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import EditIcon from "@mui/icons-material/Edit";
+import LockIcon from "@mui/icons-material/Lock";
+import DeleteIcon from "@mui/icons-material/Delete";
 import { styled } from "@mui/system";
 
 // Styled components
@@ -36,10 +41,10 @@ const StyledButton = styled(Button)(({ theme }) => ({
 }));
 
 const MainContent = styled(Box)(({ theme }) => ({
-  marginTop: "64px", 
-  height: "calc(100vh - 64px)", 
+  marginTop: "64px",
+  height: "calc(100vh - 64px)",
   width: "100%",
-  overflow: "auto", 
+  overflow: "auto",
   boxSizing: "border-box",
 }));
 
@@ -49,7 +54,7 @@ const ContentPaper = styled(Paper)(({ theme }) => ({
   width: "100%",
   borderRadius: 0,
   boxSizing: "border-box",
-  overflow: "auto", 
+  overflow: "auto",
 }));
 
 const SuperAdminDashboard = () => {
@@ -57,21 +62,7 @@ const SuperAdminDashboard = () => {
   const { addNotification } = useNotifications();
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
-  const [newUser, setNewUser] = useState({
-    email: "",
-    password: "",
-    name: "",
-    role: "Employee",
-    department: "",
-    sector: "",
-    chiefOfficerName: "",
-    supervisorName: "",
-    personNumber: "",
-    sectionalHeadName: "",
-    departmentalHeadName: "",
-    HRDirectorName: "",
-    profilePicture: ""
-  });
+  const [profiles, setProfiles] = useState([]);
   const [stats, setStats] = useState({ total: 0, approved: 0, rejected: 0, pending: 0 });
   const [leaves, setLeaves] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
@@ -91,17 +82,56 @@ const SuperAdminDashboard = () => {
   const [selectedLeaves, setSelectedLeaves] = useState([]);
   const [importFile, setImportFile] = useState(null);
   const [passwordChangeMessage, setPasswordChangeMessage] = useState({ type: "", text: "" });
+  const [expandedUserId, setExpandedUserId] = useState(null);
+  const [sortBy, setSortBy] = useState("name");
+  const [filterDepartment, setFilterDepartment] = useState("");
+  const [filterDirectorate, setFilterDirectorate] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
   const localToken = localStorage.getItem("token");
   const effectiveToken = authState?.token || localToken;
   const effectiveUser = authState?.user || JSON.parse(localStorage.getItem("user") || "{}");
+
+  const profileMap = useMemo(() => {
+    const map = {};
+    profiles.forEach(profile => {
+      map[profile.userId] = profile;
+    });
+    return map;
+  }, [profiles]);
+
+  const departments = useMemo(() => [...new Set(profiles.map(p => p.department).filter(Boolean))], [profiles]);
+  const directorates = useMemo(() => [...new Set(profiles.map(p => p.directorate).filter(Boolean))], [profiles]);
+
+  const filteredUsers = useMemo(() => {
+    let result = [...users];
+    if (searchTerm) {
+      result = result.filter(user => 
+        user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    if (filterDepartment) {
+      result = result.filter(user => profileMap[user._id]?.department === filterDepartment);
+    }
+    if (filterDirectorate) {
+      result = result.filter(user => profileMap[user._id]?.directorate === filterDirectorate);
+    }
+    result.sort((a, b) => {
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "department") return (profileMap[a._id]?.department || "").localeCompare(profileMap[b._id]?.department || "");
+      if (sortBy === "directorate") return (profileMap[a._id]?.directorate || "").localeCompare(profileMap[b._id]?.directorate || "");
+      return 0;
+    });
+
+    return result;
+  }, [users, profiles, searchTerm, filterDepartment, filterDirectorate, sortBy]);
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  // WebSocket connection
   useEffect(() => {
     if (!effectiveToken) {
       navigate("/login");
@@ -126,13 +156,25 @@ const SuperAdminDashboard = () => {
     return () => newSocket.disconnect();
   }, [effectiveToken]);
 
-  // Fetch data
   const fetchUsers = async () => {
     try {
       const response = await apiClient.get("/api/users", {
         headers: { Authorization: `Bearer ${effectiveToken}` },
       });
       setUsers(response.data);
+    } catch (error) {
+      const errorMessage = error.response?.data?.error || "An error occurred";
+      setMessage({ type: "error", text: errorMessage });
+      addNotification(errorMessage, "error");
+    }
+  };
+
+  const fetchProfiles = async () => {
+    try {
+      const response = await apiClient.get("/api/users/profiles", {
+        headers: { Authorization: `Bearer ${effectiveToken}` },
+      });
+      setProfiles(response.data);
     } catch (error) {
       const errorMessage = error.response?.data?.error || "An error occurred";
       setMessage({ type: "error", text: errorMessage });
@@ -189,7 +231,7 @@ const SuperAdminDashboard = () => {
 
     const fetchData = async () => {
       setIsLoading(true);
-      await Promise.all([fetchUsers(), fetchStats(), fetchLeaves(), fetchAuditLogs()]);
+      await Promise.all([fetchUsers(), fetchProfiles(), fetchStats(), fetchLeaves(), fetchAuditLogs()]);
       setIsLoading(false);
     };
 
@@ -204,36 +246,13 @@ const SuperAdminDashboard = () => {
     fetchAuditLogs();
   }, [auditFilters]);
 
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    try {
-      await apiClient.post("/api/users/add-user", newUser, {
-        headers: { Authorization: `Bearer ${effectiveToken}` },
-      });
-      fetchUsers();
-      setNewUser({
-        email: "", password: "", name: "", role: "Employee", department: "", sector: "", chiefOfficerName: "",
-        supervisorName: "", personNumber: "", sectionalHeadName: "", departmentalHeadName: "", HRDirectorName: "", profilePicture: ""
-      });
-      setMessage({ type: "success", text: "User added successfully" });
-      await apiClient.post("/api/audit-logs", {
-        action: "ADD_USER",
-        userId: effectiveUser.id,
-        details: `Added user: ${newUser.email}`
-      }, { headers: { Authorization: `Bearer ${effectiveToken}` } });
-    } catch (error) {
-      const errorMessage = error.response?.data?.error || "An error occurred";
-      setMessage({ type: "error", text: errorMessage });
-      addNotification(errorMessage, "error");
-    }
-  };
-
   const handleDeleteUser = async (userId) => {
     try {
       await apiClient.delete(`/api/users/${userId}`, {
         headers: { Authorization: `Bearer ${effectiveToken}` },
       });
       fetchUsers();
+      fetchProfiles();
       setMessage({ type: "success", text: "User deleted successfully" });
       await apiClient.post("/api/audit-logs", {
         action: "DELETE_USER",
@@ -253,6 +272,7 @@ const SuperAdminDashboard = () => {
         headers: { Authorization: `Bearer ${effectiveToken}` },
       });
       fetchUsers();
+      fetchProfiles();
       setEditProfileDialogOpen(false);
       setMessage({ type: "success", text: "Profile updated successfully" });
       await apiClient.post("/api/audit-logs", {
@@ -282,6 +302,7 @@ const SuperAdminDashboard = () => {
         }
       });
       fetchUsers();
+      fetchProfiles();
       setImportDialogOpen(false);
       setMessage({ type: "success", text: "Users imported successfully" });
       await apiClient.post("/api/audit-logs", {
@@ -312,13 +333,12 @@ const SuperAdminDashboard = () => {
         details: `Changed password for user: ${selectedUser.email}`
       }, { headers: { Authorization: `Bearer ${effectiveToken}` } });
 
-      // Delay closing the dialog to show the success message
       setTimeout(() => {
         setPasswordDialogOpen(false);
         setNewPassword("");
         setSelectedUser(null);
         setPasswordChangeMessage({ type: "", text: "" });
-        setMessage({ type: "success", text: "Password updated successfully" }); // Also show in main dashboard
+        setMessage({ type: "success", text: "Password updated successfully" });
       }, 1500);
     } catch (error) {
       const errorMessage = error.response?.data?.error || "An error occurred";
@@ -356,6 +376,7 @@ const SuperAdminDashboard = () => {
 
   const handleMenuClick = (section) => {
     if (section === "Logout") handleLogout();
+    else if (section === "Add User") navigate("/add-user");
     else {
       setActiveSection(section);
       setDrawerOpen(false);
@@ -369,8 +390,8 @@ const SuperAdminDashboard = () => {
         return <Chip label="Approved" color="success" size="small" />;
       case "Rejected":
         return <Chip label="Rejected" color="error" size="small" />;
-      case "RecommendedBySectional":
-        return <Chip label="Recommended by Sectional" color="info" size="small" />;
+      case "RecommendedByDirector":
+        return <Chip label="Recommended by Director" color="info" size="small" />;
       case "RecommendedByDepartmental":
         return <Chip label="Recommended by Departmental" color="info" size="small" />;
       case "Pending":
@@ -379,7 +400,7 @@ const SuperAdminDashboard = () => {
     }
   };
 
-  const menuItems = ["User Management", "Leave Analytics", "Audit Logs", "Logout"];
+  const menuItems = ["User Management", "Add User","Leave Analytics", "Audit Logs", "Logout"];
 
   if (isLoading) {
     return (
@@ -441,204 +462,192 @@ const SuperAdminDashboard = () => {
               <Divider sx={{ mb: 3 }} />
               <Box sx={{ mb: 4, maxWidth: "100%", overflowX: "auto" }}>
                 <Typography variant="h6" sx={{ mb: 2 }}>
-                  Add New User
+                  Users
                 </Typography>
-                <Box component="form" onSubmit={handleAddUser} sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Email"
-                        value={newUser.email}
-                        onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                        fullWidth
-                        required
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Password"
-                        type="password"
-                        value={newUser.password}
-                        onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                        fullWidth
-                        required
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Name"
-                        value={newUser.name}
-                        onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                        fullWidth
-                        required
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Role"
-                        select
-                        value={newUser.role}
-                        onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                        fullWidth
-                        SelectProps={{ native: true }}
-                      >
-                        <option value="Employee">Employee</option>
-                        <option value="Supervisor">Supervisor</option>
-                        <option value="SectionalHead">Sectional Head</option>
-                        <option value="DepartmentalHead">Departmental Head</option>
-                        <option value="HRDirector">HR Director</option>
-                      </TextField>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Department"
-                        value={newUser.department}
-                        onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
-                        fullWidth
-                        required
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Sector"
-                        value={newUser.sector}
-                        onChange={(e) => setNewUser({ ...newUser, sector: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Chief Officer Name"
-                        value={newUser.chiefOfficerName}
-                        onChange={(e) => setNewUser({ ...newUser, chiefOfficerName: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Supervisor Name"
-                        value={newUser.supervisorName}
-                        onChange={(e) => setNewUser({ ...newUser, supervisorName: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Person Number"
-                        value={newUser.personNumber}
-                        onChange={(e) => setNewUser({ ...newUser, personNumber: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Sectional Head Name"
-                        value={newUser.sectionalHeadName}
-                        onChange={(e) => setNewUser({ ...newUser, sectionalHeadName: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Departmental Head Name"
-                        value={newUser.departmentalHeadName}
-                        onChange={(e) => setNewUser({ ...newUser, departmentalHeadName: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="HR Director Name"
-                        value={newUser.HRDirectorName}
-                        onChange={(e) => setNewUser({ ...newUser, HRDirectorName: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Profile Picture URL"
-                        value={newUser.profilePicture}
-                        onChange={(e) => setNewUser({ ...newUser, profilePicture: e.target.value })}
-                        fullWidth
-                      />
-                    </Grid>
-                  </Grid>
-                  <StyledButton type="submit" variant="contained" color="primary" sx={{ mt: 2, width: "fit-content" }}>
-                    Add User
+                <Box sx={{ mb: 2, display: "flex", gap: 2, flexWrap: "wrap" }}>
+                  <TextField
+                    label="Search by Name or Email"
+                    variant="outlined"
+                    size="small"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    sx={{ minWidth: 200 }}
+                  />
+                  <Select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    displayEmpty
+                    size="small"
+                    sx={{ minWidth: 150 }}
+                  >
+                    <MenuItem value="name">Sort by Name</MenuItem>
+                    <MenuItem value="department">Sort by Department</MenuItem>
+                    <MenuItem value="directorate">Sort by Directorate</MenuItem>
+                  </Select>
+                  <Select
+                    value={filterDepartment}
+                    onChange={(e) => setFilterDepartment(e.target.value)}
+                    displayEmpty
+                    size="small"
+                    sx={{ minWidth: 150 }}
+                  >
+                    <MenuItem value="">All Departments</MenuItem>
+                    {departments.map((dept) => (
+                      <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+                    ))}
+                  </Select>
+                  <Select
+                    value={filterDirectorate}
+                    onChange={(e) => setFilterDirectorate(e.target.value)}
+                    displayEmpty
+                    size="small"
+                    sx={{ minWidth: 150 }}
+                  >
+                    <MenuItem value="">All Directorates</MenuItem>
+                    {directorates.map((dir) => (
+                      <MenuItem key={dir} value={dir}>{dir}</MenuItem>
+                    ))}
+                  </Select>
+                  <StyledButton variant="contained" color="secondary" onClick={() => setImportDialogOpen(true)}>
+                    Import Users
                   </StyledButton>
                 </Box>
-              </Box>
-
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Users
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <StyledButton variant="contained" color="secondary" onClick={() => setImportDialogOpen(true)}>
-                  Import Users
-                </StyledButton>
-              </Box>
-              <TableContainer sx={{ maxHeight: "40vh", overflow: "auto" }}>
-                <Table stickyHeader sx={{ minWidth: "100%", tableLayout: "auto" }}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Name</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Email</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Role</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Department</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {users.length > 0 ? (
-                      users.map((user) => (
-                        <TableRow key={user._id} hover sx={{ "&:hover": { bgcolor: "#f0f0f0" } }}>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{user.name}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{user.email}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{user.role}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{user.department || "N/A"}</TableCell>
-                          <TableCell>
-                            <StyledButton
-                              variant="outlined"
-                              color="primary"
-                              onClick={() => {
-                                setEditProfile(user);
-                                setEditProfileDialogOpen(true);
+                <TableContainer sx={{ boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)", borderRadius: 2, border: "1px solid #e0e0e0", bgcolor: "#fff" }}>
+                  <Table stickyHeader sx={{ minWidth: "100%", tableLayout: "auto" }}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Name</TableCell>
+                        <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Email</TableCell>
+                        <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Role</TableCell>
+                        <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Department</TableCell>
+                        <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Directorate</TableCell>
+                        <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {filteredUsers.length > 0 ? (
+                        filteredUsers.map((user) => (
+                          <React.Fragment key={user._id}>
+                            <TableRow
+                              hover
+                              onClick={() => setExpandedUserId(expandedUserId === user._id ? null : user._id)}
+                              sx={{
+                                "&:hover": { bgcolor: "#f0f0f0" },
+                                cursor: "pointer",
+                                borderBottom: "1px solid #e0e0e0",
                               }}
-                              sx={{ mr: 1 }}
                             >
-                              Edit Profile
-                            </StyledButton>
-                            <StyledButton
-                              variant="outlined"
-                              color="primary"
-                              onClick={() => {
-                                setSelectedUser(user);
-                                setPasswordDialogOpen(true);
-                              }}
-                              sx={{ mr: 1 }}
-                            >
-                              Change Password
-                            </StyledButton>
-                            <StyledButton
-                              variant="outlined"
-                              color="error"
-                              onClick={() => handleDeleteUser(user._id)}
-                            >
-                              Delete
-                            </StyledButton>
+                              <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{user.name}</TableCell>
+                              <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{user.email}</TableCell>
+                              <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{user.role}</TableCell>
+                              <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{profileMap[user._id]?.department || "—"}</TableCell>
+                              <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{profileMap[user._id]?.directorate || "—"}</TableCell>
+                              <TableCell sx={{ px: 3, py: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                                {expandedUserId === user._id ? <ExpandLessIcon sx={{ color: "#718096" }} /> : <ExpandMoreIcon sx={{ color: "#718096" }} />}
+                              </TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell colSpan={6} sx={{ padding: 0, borderBottom: "1px solid #e0e0e0" }}>
+                                <Collapse in={expandedUserId === user._id} timeout="auto" unmountOnExit>
+                                  <Box
+                                    sx={{
+                                      p: 3,
+                                      bgcolor: "#f7fafc",
+                                      border: "1px solid #e2e8f0",
+                                      borderRadius: 2,
+                                      mx: 2,
+                                      mb: 2,
+                                      boxShadow: "0 2px 8px rgba(0, 0, 0, 0.03)",
+                                    }}
+                                  >
+                                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: "#2d3748", mb: 3 }}>
+                                      User Details
+                                    </Typography>
+                                    <Grid container spacing={2}>
+                                      <Grid item xs={12} sm={6}>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Email:</strong> {profileMap[user._id]?.email || user.email}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Role:</strong> {profileMap[user._id]?.role || user.role}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Department:</strong> {profileMap[user._id]?.department || "—"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Directorate:</strong> {profileMap[user._id]?.directorate || "—"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Chief Officer Name:</strong> {profileMap[user._id]?.chiefOfficerName || "—"}
+                                        </Typography>
+                                      </Grid>
+                                      <Grid item xs={12} sm={6}>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Person Number:</strong> {profileMap[user._id]?.personNumber || "—"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Director Name:</strong> {profileMap[user._id]?.directorName || "—"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Departmental Head Name:</strong> {profileMap[user._id]?.departmentalHeadName || "—"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>HR Director Name:</strong> {profileMap[user._id]?.HRDirectorName || "—"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Profile Picture URL:</strong> {profileMap[user._id]?.profilePicture || "—"}
+                                        </Typography>
+                                      </Grid>
+                                    </Grid>
+                                    <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}>
+                                      <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        startIcon={<EditIcon />}
+                                        onClick={() => {
+                                          setEditProfile(user);
+                                          setEditProfileDialogOpen(true);
+                                        }}
+                                      >
+                                        Edit Profile
+                                      </Button>
+                                      <Button
+                                        variant="outlined"
+                                        color="primary"
+                                        startIcon={<LockIcon />}
+                                        onClick={() => {
+                                          setSelectedUser(user);
+                                          setPasswordDialogOpen(true);
+                                        }}
+                                      >
+                                        Change Password
+                                      </Button>
+                                      <Button
+                                        variant="contained"
+                                        color="error"
+                                        startIcon={<DeleteIcon />}
+                                        onClick={() => handleDeleteUser(user._id)}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </Box>
+                                  </Box>
+                                </Collapse>
+                              </TableCell>
+                            </TableRow>
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center" sx={{ py: 4, color: "#718096", fontStyle: "italic" }}>
+                            No users found
                           </TableCell>
                         </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} align="center">
-                          No users found
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
             </>
           )}
 
@@ -743,11 +752,11 @@ const SuperAdminDashboard = () => {
                   </StyledButton>
                 </Box>
               )}
-              <TableContainer sx={{ maxHeight: "40vh", overflow: "auto" }}>
+              <TableContainer sx={{ boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)", borderRadius: 2, border: "1px solid #e0e0e0", bgcolor: "#fff" }}>
                 <Table stickyHeader sx={{ minWidth: "100%", tableLayout: "auto" }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>
                         <Checkbox
                           checked={selectedLeaves.length === leaves.length && leaves.length > 0}
                           onChange={(e) => {
@@ -759,19 +768,19 @@ const SuperAdminDashboard = () => {
                           }}
                         />
                       </TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>
                         Employee Name
                       </TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>
                         Leave Type
                       </TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>
                         Status
                       </TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>
                         Start Date
                       </TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>
                         End Date
                       </TableCell>
                     </TableRow>
@@ -779,8 +788,8 @@ const SuperAdminDashboard = () => {
                   <TableBody>
                     {leaves.length > 0 ? (
                       leaves.map((leave) => (
-                        <TableRow key={leave._id} hover sx={{ "&:hover": { bgcolor: "#f0f0f0" } }}>
-                          <TableCell>
+                        <TableRow key={leave._id} hover sx={{ "&:hover": { bgcolor: "#f0f0f0" }, borderBottom: "1px solid #e0e0e0" }}>
+                          <TableCell sx={{ px: 3, py: 2 }}>
                             <Checkbox
                               checked={selectedLeaves.includes(leave._id)}
                               onChange={(e) => {
@@ -792,20 +801,20 @@ const SuperAdminDashboard = () => {
                               }}
                             />
                           </TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.employeeName}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.leaveType}</TableCell>
-                          <TableCell>{getStatusChip(leave)}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{leave.employeeName}</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{leave.leaveType}</TableCell>
+                          <TableCell sx={{ px: 3, py: 2 }}>{getStatusChip(leave)}</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
                             {new Date(leave.startDate).toLocaleDateString()}
                           </TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
                             {new Date(leave.endDate).toLocaleDateString()}
                           </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} align="center">
+                        <TableCell colSpan={6} align="center" sx={{ py: 4, color: "#718096", fontStyle: "italic" }}>
                           No leave requests found
                         </TableCell>
                       </TableRow>
@@ -862,31 +871,31 @@ const SuperAdminDashboard = () => {
                   </Grid>
                 </Grid>
               </Box>
-              <TableContainer sx={{ maxHeight: "50vh", overflow: "auto" }}>
+              <TableContainer sx={{ boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)", borderRadius: 2, border: "1px solid #e0e0e0", bgcolor: "#fff" }}>
                 <Table stickyHeader sx={{ minWidth: "100%", tableLayout: "auto" }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Action</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>User ID</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Details</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Timestamp</TableCell>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Action</TableCell>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>User ID</TableCell>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Details</TableCell>
+                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f7fafc", whiteSpace: "nowrap", px: 3, py: 2 }}>Timestamp</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {auditLogs.length > 0 ? (
                       auditLogs.map((log) => (
-                        <TableRow key={log._id} hover sx={{ "&:hover": { bgcolor: "#f0f0f0" } }}>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{log.action}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{log.userId}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{log.details}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>
+                        <TableRow key={log._id} hover sx={{ "&:hover": { bgcolor: "#f0f0f0" }, borderBottom: "1px solid #e0e0e0" }}>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{log.action}</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{log.userId}</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>{log.details}</TableCell>
+                          <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
                             {new Date(log.timestamp).toLocaleString()}
                           </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={4} align="center">
+                        <TableCell colSpan={4} align="center" sx={{ py: 4, color: "#718096", fontStyle: "italic" }}>
                           No audit logs found
                         </TableCell>
                       </TableRow>
@@ -899,7 +908,7 @@ const SuperAdminDashboard = () => {
         </ContentPaper>
       </MainContent>
 
-      {/* Edit Profile Dialog */}
+      {/* Dialog for Editing Profile */}
       <Dialog open={editProfileDialogOpen} onClose={() => setEditProfileDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>Edit Profile</DialogTitle>
         <DialogContent>
@@ -933,8 +942,7 @@ const SuperAdminDashboard = () => {
                   SelectProps={{ native: true }}
                 >
                   <option value="Employee">Employee</option>
-                  <option value="Supervisor">Supervisor</option>
-                  <option value="SectionalHead">Sectional Head</option>
+                  <option value="Director">Director</option>
                   <option value="DepartmentalHead">Departmental Head</option>
                   <option value="HRDirector">HR Director</option>
                 </TextField>
@@ -950,9 +958,9 @@ const SuperAdminDashboard = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Sector"
-                  value={editProfile.sector}
-                  onChange={(e) => setEditProfile({ ...editProfile, sector: e.target.value })}
+                  label="Directorate"
+                  value={editProfile.directorate}
+                  onChange={(e) => setEditProfile({ ...editProfile, directorate: e.target.value })}
                   fullWidth
                 />
               </Grid>
@@ -966,14 +974,6 @@ const SuperAdminDashboard = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Supervisor Name"
-                  value={editProfile.supervisorName}
-                  onChange={(e) => setEditProfile({ ...editProfile, supervisorName: e.target.value })}
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
                   label="Person Number"
                   value={editProfile.personNumber}
                   onChange={(e) => setEditProfile({ ...editProfile, personNumber: e.target.value })}
@@ -982,9 +982,9 @@ const SuperAdminDashboard = () => {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Sectional Head Name"
-                  value={editProfile.sectionalHeadName}
-                  onChange={(e) => setEditProfile({ ...editProfile, sectionalHeadName: e.target.value })}
+                  label="Director Name"
+                  value={editProfile.directorName}
+                  onChange={(e) => setEditProfile({ ...editProfile, directorName: e.target.value })}
                   fullWidth
                 />
               </Grid>
@@ -1023,7 +1023,24 @@ const SuperAdminDashboard = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Password Change Dialog */}
+
+      {/* Dialog for Importing Users */}
+      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)}>
+        <DialogTitle>Import Users</DialogTitle>
+        <DialogContent>
+          <Input
+            type="file"
+            onChange={(e) => setImportFile(e.target.files[0])}
+            fullWidth
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleImportUsers} color="primary">Import</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog for Changing Password */}
       <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)}>
         <DialogTitle>Change Password</DialogTitle>
         <DialogContent>
@@ -1038,34 +1055,12 @@ const SuperAdminDashboard = () => {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             fullWidth
-            sx={{ mt: 2 }}
+            margin="normal"
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleChangePassword} variant="contained" color="primary">
-            Update Password
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Import Users Dialog */}
-      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)}>
-        <DialogTitle>Import Users</DialogTitle>
-        <DialogContent>
-          <Input
-            type="file"
-            accept=".csv"
-            onChange={(e) => setImportFile(e.target.files[0])}
-            fullWidth
-            sx={{ mt: 2 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setImportDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleImportUsers} variant="contained" color="primary">
-            Import
-          </Button>
+          <Button onClick={handleChangePassword} color="primary">Change</Button>
         </DialogActions>
       </Dialog>
     </>

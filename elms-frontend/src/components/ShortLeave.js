@@ -73,7 +73,8 @@ const ShortLeave = () => {
   const navigate = useNavigate();
   const [chiefOfficerName, setChiefOfficerName] = useState("");
   const [department, setDepartment] = useState("");
-  const [supervisorName, setSupervisorName] = useState("");
+  
+  const [directorName, setDirectorName] = useState("");
   const [employeeName, setEmployeeName] = useState("");
   const [personNumber, setPersonNumber] = useState("");
   const [daysApplied, setDaysApplied] = useState("");
@@ -114,7 +115,7 @@ const ShortLeave = () => {
         const profile = profileRes.data;
         setChiefOfficerName(profile.chiefOfficerName || "");
         setDepartment(profile.department || "");
-        setSupervisorName(profile.supervisorName || "");
+        setDirectorName(profile.directorName || "");
         setEmployeeName(profile.name || "");
         setPersonNumber(profile.personNumber || "");
 
@@ -124,7 +125,7 @@ const ShortLeave = () => {
         console.log("Fetched leave requests:", leavesRes.data);
         setLeaveRequests(Array.isArray(leavesRes.data) ? leavesRes.data : []);
 
-        if (effectiveUser.role === "Supervisor") {
+        if (effectiveUser.role === "Director") {
           const pendingRes = await apiClient.get("/api/leaves/pending-approvals", {
             headers: { Authorization: `Bearer ${effectiveToken}` },
           });
@@ -148,7 +149,7 @@ const ShortLeave = () => {
   }, []);
 
   const validateForm = () => {
-    if (!chiefOfficerName || !department || !supervisorName || !employeeName || !personNumber || !daysApplied || !startDate || !endDate || !reason) {
+    if (!chiefOfficerName || !department || !directorName || !employeeName || !personNumber || !daysApplied || !startDate || !endDate || !reason) {
       setMessage({ type: "error", text: "All required fields must be filled" });
       return false;
     }
@@ -192,7 +193,7 @@ const ShortLeave = () => {
           leaveType: "Short Leave",
           chiefOfficerName,
           department,
-          supervisorName,
+          directorName,
           employeeName,
           personNumber,
           daysApplied: Number(daysApplied),
@@ -336,13 +337,13 @@ const ShortLeave = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
-                  label="Supervisor Name"
-                  value={supervisorName}
-                  onChange={(e) => setSupervisorName(e.target.value)}
+                  label="Director Name"
+                  value={directorName}
+                  onChange={(e) => setDirectorName(e.target.value)}
                   margin="normal"
                   required
-                  helperText="Your supervisor's name"
-                  aria-label="Supervisor Name"
+                  helperText="Your director's name"
+                  aria-label="Director Name"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -477,12 +478,12 @@ const ShortLeave = () => {
         <Box component="ul" sx={{ pl: 2 }}>
           <li>Days applied must not exceed 5 days.</li>
           <li>Must be submitted at least 7 days in advance, unless an emergency.</li>
-          <li>Requires supervisor approval; Human Resources Management notified for records.</li>
+          <li>Requires director approval; Human Resources Management notified for records.</li>
           <li>Days applied for to be deducted from annual leave.</li>
         </Box>
       </Paper>
 
-      {effectiveUser.role === "Supervisor" && (
+      {effectiveUser.role === "Director" && (
         <Paper elevation={3} sx={{ p: 4, width: "100%", borderRadius: 0, boxSizing: "border-box", boxShadow: 5, mt: 2 }}>
           <Typography variant="h6" gutterBottom>Pending Short Leave Approvals</Typography>
           <TableContainer sx={{ maxHeight: "calc(100vh - 300px)", overflow: "auto" }}>
@@ -556,7 +557,7 @@ const ShortLeave = () => {
               <TableRow>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Chief Officer</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Department</TableCell>
-                <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Supervisor</TableCell>
+                <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Director</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Employee</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Person #</TableCell>
                 <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Days</TableCell>
@@ -579,7 +580,7 @@ const ShortLeave = () => {
                   >
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.chiefOfficerName}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.department}</TableCell>
-                    <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.supervisorName}</TableCell>
+                    <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.directorName}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.employeeName}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.personNumber}</TableCell>
                     <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.daysApplied}</TableCell>

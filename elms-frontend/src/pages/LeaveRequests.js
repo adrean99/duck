@@ -92,7 +92,7 @@ const LeaveRequests = () => {
                 <TableCell>{leave.startDate.split("T")[0]}</TableCell>
                 <TableCell>{leave.endDate.split("T")[0]}</TableCell>
                 <TableCell>{leave.status}</TableCell>
-                {user?.role === "Supervisor" && leave.status === "Pending" && (
+                {user?.role === "Director" && leave.status === "Pending" && (
                   <TableCell>
                     <Button color="success" onClick={() => updateLeaveStatus(leave._id, "Approved")}>Approve</Button>
                     <Button color="error" onClick={() => updateLeaveStatus(leave._id, "Rejected")}>Reject</Button>

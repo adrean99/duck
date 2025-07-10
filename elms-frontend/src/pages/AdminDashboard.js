@@ -5,53 +5,14 @@ import apiClient from "../utils/apiClient";
 import { useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 import {
-  Paper,
-  Typography,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableCell,
-  Button,
-  Alert,
-  Drawer,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  IconButton,
-  AppBar,
-  Toolbar,
-  Modal,
-  Box,
-  TableContainer,
-  Chip,
-  Tooltip,
-  Divider,
-  TextField,
-  Grid,
-  Avatar,
-  CircularProgress,
-  Input,
-  Checkbox,
-  Menu,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Collapse,
-  Select,
-  FormControl,
-  InputLabel,
-  Pagination,
+  Paper, Typography, Table, TableHead, TableBody, TableRow, TableCell, Button, Alert, Drawer,
+  List, ListItem, ListItemText, ListItemIcon, IconButton, AppBar, Toolbar, Modal, Box,
+  TableContainer, Chip, Tooltip, Divider, TextField, Grid, CircularProgress, Input,
+  Checkbox, Menu, MenuItem, Collapse, Select, FormControl, InputLabel, Pagination, LinearProgress
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import DownloadIcon from "@mui/icons-material/Download";
-import HistoryIcon from "@mui/icons-material/History";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import ListAltIcon from "@mui/icons-material/ListAlt";
 import PersonIcon from "@mui/icons-material/Person";
@@ -66,8 +27,13 @@ import { format, parse, startOfWeek, getDay } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { io } from "socket.io-client";
 import { ProfileTable } from "./Profile";
-import LeaveRoster from "../components/LeaveRoster";
-import { CSVLink } from "react-csv";
+import AdminLeaveRoster from "../components/AdminLeaveRoster";
+import AuditLogs from "../components/AuditLogs";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import SortIcon from "@mui/icons-material/Sort";
+import DownloadIcon from "@mui/icons-material/Download";
+import AssessmentIcon from "@mui/icons-material/Assessment";
+
 // Date-fns setup for react-big-calendar
 const locales = {
   "en-US": require("date-fns/locale/en-US"),
@@ -79,7 +45,7 @@ const localizer = dateFnsLocalizer({
   getDay,
   locales,
 });
-
+/*
 // Helper function to calculate the next working day (assuming Mon-Fri workweek)
 const calculateNextWorkingDay = (date) => {
   const nextDay = new Date(date);
@@ -100,8 +66,7 @@ const validatePhoneNumber = (phoneNumber) => {
   const phoneRegex = /^\+?[1-9]\d{1,14}$/;
   return phoneRegex.test(phoneNumber);
 };
-
-
+*/
 // Styled components for custom styling
 const StyledAppBar = styled(AppBar)(({ theme }) => ({
   backgroundColor: "#1976d2",
@@ -120,8 +85,8 @@ const StyledDrawer = styled(Drawer)(({ theme }) => ({
   },
 }));
 
-const StyledButton = styled(Button) ({
-borderRadius: 6,
+const StyledButton = styled(Button)({
+  borderRadius: 6,
   textTransform: "none",
   padding: "8px 16px",
   transition: "all 0.3s ease",
@@ -153,7 +118,12 @@ const modalStyle = {
   overflowY: "auto",
 };
 
+const MainContent = styled(Box)(({ theme }) => ({
+  marginTop: 64, height: "calc(100vh - 64px)", width: "100%", overflow: "auto",
+  background: "linear-gradient(135deg, #f5f7fa 0%, #e4e9f0 100%)",
+}));
 
+/*
 // Helper functions
 const getRowBackgroundColor = (leave) => {
   switch (leave.status) {
@@ -163,326 +133,98 @@ const getRowBackgroundColor = (leave) => {
     default: return "transparent";
   }
 };
+*/
+const getRowBackgroundColor = (leave) => ({
+  "Approved": "#e8f5e9", "Rejected": "#ffebee", "Pending": "#fff3e0", default: "transparent",
+}[leave.status] || "transparent");
 
 const filterLeavesByPendingActions = (leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter) => {
   let filteredLeaves = leaves;
   if (showPendingActionsOnly) {
     filteredLeaves = leaves.filter((leave) => {
-      if (userRole === "Supervisor" && isShortLeave) return leave.status === "Pending";
-      if (userRole === "SectionalHead" && !isShortLeave) return leave.status === "Pending";
-      if (userRole === "DepartmentalHead" && !isShortLeave) return leave.status === "RecommendedBySectional";
-      if (userRole === "HRDirector") {
-        return isShortLeave
-          ? leave.status === "RecommendedBySectional"
-          : leave.status === "RecommendedByDepartmental";
+      if (!leave.currentApprover) return false; // Skip if no current approver (e.g., already approved/rejected)
+      if (userRole === "Admin") return true; // Admins see all pending
+      if (isShortLeave) {
+        // Short Leave: Director or HRDirector can act
+        return (userRole === "Director" || userRole === "HRDirector") && leave.currentApprover === userRole;
+      } else {
+        // Annual Leave: Follow Director → DepartmentalHead → HRDirector
+        return leave.currentApprover === userRole;
       }
-      if (userRole === "Admin") return true;
-      return false;
     });
   }
+  
   if (specificRoleFilter && specificRoleFilter !== "All") {
     filteredLeaves = filteredLeaves.filter((leave) => {
-      if (specificRoleFilter === "Supervisor" && isShortLeave) return leave.status === "Pending";
-      if (specificRoleFilter === "SectionalHead" && !isShortLeave) return leave.status === "Pending";
-      if (specificRoleFilter === "DepartmentalHead" && !isShortLeave) return leave.status === "RecommendedBySectional";
-      if (specificRoleFilter === "HRDirector") {
-        return isShortLeave
-          ? leave.status === "RecommendedBySectional"
-          : leave.status === "RecommendedByDepartmental";
+      if (isShortLeave) {
+        return (specificRoleFilter === "Director" || specificRoleFilter === "HRDirector") && leave.currentApprover === specificRoleFilter;
+      } else {
+        return leave.currentApprover === specificRoleFilter;
       }
-      return true;
     });
   }
   return filteredLeaves;
 };
 
+const getProgress = (leave) => {
+  if (leave.status === "Approved" || leave.status === "Rejected") return 100;
+  if (!leave?.currentApprover) return 0;
+  const approvals = leave.approvals || [];
+  if (["Approved", "Rejected"].includes(leave.status)) return 100;
+  let progress = 0;
+  if (approvals.some(a => a.approverRole === "Director" && a.status === "Approved")) progress = 33;
+  if (approvals.some(a => a.approverRole === "DepartmentalHead" && a.status === "Approved")) progress = 66;
+  if (approvals.some(a => a.approverRole === "HRDirector" && a.status === "Approved")) progress = 100;
+  return progress;
+};
 
-const MainContent = styled(Box)(({ theme }) => ({
-  marginTop: 64,
-  height: "calc(100vh - 64px)",
-  width: "100%",
-  overflow: "auto",
-  background: "linear-gradient(135deg, #f5f7fa 0%, #e4e9f0 100%)",
-}));
-/*  
-const ProfileForm = ({
-  profile,
-  isEditingProfile,
-  setIsEditingProfile,
-  formData,
-  formErrors,
-  handleInputChange,
-  handleProfileUpdate,
-}) => {
- return (
-            <>
-              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-                Admin Profile
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              {isEditingProfile ? (
-                <Box component="form" sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Name"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.name}
-                        helperText={formErrors.name}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.email}
-                        helperText={formErrors.email}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Department"
-                        name="department"
-                        value={formData.department}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.department}
-                        helperText={formErrors.department}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Phone Number"
-                        name="phoneNumber"
-                        value={formData.phoneNumber}
-                        onChange={handleInputChange}
-                        fullWidth
-                        error={!!formErrors.phoneNumber}
-                        helperText={formErrors.phoneNumber}
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Input
-                        type="file"
-                        name="profilePicture"
-                        onChange={handleInputChange}
-                        fullWidth
-                        inputProps={{ accept: "image/*" }}
-                      />
-                      {formData.profilePicture && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          Selected file: {formData.profilePicture.name}
-                        </Typography>
-                      )}
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Chief Officer Name"
-                        name="chiefOfficerName"
-                        value={formData.chiefOfficerName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Supervisor Name"
-                        name="supervisorName"
-                        value={formData.supervisorName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Person Number"
-                        name="personNumber"
-                        value={formData.personNumber}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Sector"
-                        name="sector"
-                        value={formData.sector}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Sectional Head Name"
-                        name="sectionalHeadName"
-                        value={formData.sectionalHeadName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="Departmental Head Name"
-                        name="departmentalHeadName"
-                        value={formData.departmentalHeadName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <TextField
-                        label="HR Director Name"
-                        name="HRDirectorName"
-                        value={formData.HRDirectorName}
-                        onChange={handleInputChange}
-                        fullWidth
-                      />
-                    </Grid>
-                  </Grid>
-                  <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-                    <StyledButton variant="contained" color="primary" onClick={handleProfileUpdate}>
-                      Save
-                    </StyledButton>
-                    <StyledButton
-                      variant="outlined"
-                      color="secondary"
-                      onClick={() => setIsEditingProfile(false)}
-                    >
-                      Cancel
-                    </StyledButton>
-                  </Box>
-                </Box>
-              ) : (
-                <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2 }}>
-                    <Avatar
-                      src={profile?.profilePicture || ""}
-                      alt={profile?.name || "Admin"}
-                      sx={{ width: 80, height: 80 }}
-                    />
-                    <Typography variant="h6">{profile?.name || "N/A"}</Typography>
-                  </Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Email:</strong> {profile?.email || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Department:</strong> {profile?.department || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Phone Number:</strong> {profile?.phoneNumber || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Chief Officer:</strong> {profile?.chiefOfficerName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Supervisor:</strong> {profile?.supervisorName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Person Number:</strong> {profile?.personNumber || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Sector:</strong> {profile?.sector || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Sectional Head:</strong> {profile?.sectionalHeadName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>Departmental Head:</strong> {profile?.departmentalHeadName || "N/A"}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="body1" sx={{ color: "#555" }}>
-                        <strong>HR Director:</strong> {profile?.HRDirectorName || "N/A"}
-                      </Typography>
-                    </Grid>
-                  </Grid>
-                  <StyledButton
-                    variant="contained"
-                    color="primary"
-                    onClick={() => setIsEditingProfile(true)}
-                    sx={{ mt: 3, width: "fit-content" }}
-                  >
-                    Edit Profile
-                  </StyledButton>
-                </Box>
-              )}
-            </>
-  );
-          }; 
-*/
+
+
 const LeaveCalendar = ({
   calendarError,
   isFetchingEvents,
   fetchLeaveEvents,
   events,
   setSelectedEvent,
-  
 }) => {
   return (
-            <>
-              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-                Leave Calendar
-              </Typography>
-              <Divider sx={{ mb: 3 }} />
-              
-              {calendarError ? (
-                <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <Typography variant="body1" sx={{ color: "#f44336" }}>
-                    {calendarError}
-                  </Typography>
-                  <StyledButton
-                    variant="contained"
-                    color="primary"
-                    onClick={fetchLeaveEvents}
-                    disabled={isFetchingEvents}
-                  >
-                    {isFetchingEvents ? <CircularProgress size={24} /> : "Retry"}
-                  </StyledButton>
-                </Box>
-              ) : (
-                <Box sx={{ height: "calc(100% - 80px)" }}>
-                  <Calendar
-                    localizer={localizer}
-                    events={events}
-                    startAccessor="start"
-                    endAccessor="end"
-                    style={{ height: "100%", width: "100%" }}
-                    onSelectEvent={(event) => setSelectedEvent(event)}
-                    eventPropGetter={(event) => ({
-                      style: event.style,
-                    })}
-                  />
-                </Box>
-              )}
-            </>
-          );
-        };
-
-
+    <>
+      <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
+        Leave Calendar
+      </Typography>
+      <Divider sx={{ mb: 3 }} />
+      {calendarError ? (
+        <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+          <Typography variant="body1" sx={{ color: "#f44336" }}>
+            {calendarError}
+          </Typography>
+          <StyledButton
+            variant="contained"
+            color="primary"
+            onClick={fetchLeaveEvents}
+            disabled={isFetchingEvents}
+          >
+            {isFetchingEvents ? <CircularProgress size={24} /> : "Retry"}
+          </StyledButton>
+        </Box>
+      ) : (
+        <Box sx={{ height: "calc(100% - 80px)" }}>
+          <Calendar
+            localizer={localizer}
+            events={events}
+            startAccessor="start"
+            endAccessor="end"
+            style={{ height: "100%", width: "100%" }}
+            onSelectEvent={(event) => setSelectedEvent(event)}
+            eventPropGetter={(event) => ({
+              style: event.style,
+            })}
+          />
+        </Box>
+      )}
+    </>
+  );
+};
 
 const LeaveTable = ({
   leaves,
@@ -491,7 +233,7 @@ const LeaveTable = ({
   showPendingActionsOnly,
   setShowPendingActionsOnly,
   handleAction,
-  handleViewDetails,
+  setLeaves,
   selectedLeaves,
   setSelectedLeaves,
   handleBulkAction,
@@ -507,13 +249,34 @@ const LeaveTable = ({
   rowsPerPage,
   isActiveLeave,
   getStatusChip,
-  handleEditClick,
   handleDeleteClick,
+  directorates,
+  departments,
+  isActionLoading,
+  socket,
 }) => {
-  const [showFilters, setShowFilters] = useState(false);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [contextLeave, setContextLeave] = useState(null);
+  const [expandedLeaveId, setExpandedLeaveId] = useState(null);
+  const [sortAnchorEl, setSortAnchorEl] = useState(null); // For sort menu
+  const [progressMap, setProgressMap] = useState({});
 
+  useEffect(() => {
+    if (socket) {
+      socket.on('leaveUpdate', (data) => {
+        //setLeaves((prevLeaves) =>
+          //prevLeaves.map((leave) =>
+            //leave._id === data.leaveId ? { ...leave, status: data.status, progress: data.progress, currentApprover: data.currentApprover } : leave
+          //)
+        //);
+      //});
+      setProgressMap((prev) => ({ ...prev, [data.leaveId]: data.progress || 0 }));
+        setSelectedLeaves((prev) => prev.filter(id => id !== data.leaveId)); // Deselect if updated
+      });
+      return () => {
+        socket.off('leaveUpdate');
+      };
+    }
+  }, [socket.setSelectedLeaves]);
+/*
   const filteredLeaves = useMemo(() => {
     return filterLeavesByPendingActions(leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter).filter(
       (leave) =>
@@ -521,154 +284,370 @@ const LeaveTable = ({
         (!filterParams.startDate || new Date(leave.startDate) >= new Date(filterParams.startDate)) &&
         (!filterParams.endDate || new Date(leave.endDate) <= new Date(filterParams.endDate)) &&
         (!filterParams.employeeName ||
-          leave.employeeName.toLowerCase().includes(filterParams.employeeName.toLowerCase()))
+          leave.employeeName.toLowerCase().includes(filterParams.employeeName.toLowerCase())) &&
+        (!filterParams.directorate || leave.directorate === filterParams.directorate) &&
+        (!filterParams.department || leave.department === filterParams.department)
     );
   }, [leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter, filterParams]);
+*/
 
-  const sortedLeaves = useMemo(() => {
-    return [...filteredLeaves].sort((a, b) => {
-      let valueA = sortColumn === "startDate" ? new Date(a.startDate) : a[sortColumn];
-      let valueB = sortColumn === "startDate" ? new Date(b.startDate) : b[sortColumn];
-      if (sortColumn === "employeeName") {
-        valueA = valueA.toLowerCase();
-        valueB = valueB.toLowerCase();
+const filteredLeaves = useMemo(() =>
+    filterLeavesByPendingActions(leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter).filter(
+      (leave) => !filterParams.status || leave.status === filterParams.status ||
+        !filterParams.startDate || new Date(leave.startDate) >= new Date(filterParams.startDate) ||
+        !filterParams.endDate || new Date(leave.endDate) <= new Date(filterParams.endDate) ||
+        !filterParams.employeeName || leave.employeeName.toLowerCase().includes(filterParams.employeeName.toLowerCase()) ||
+        !filterParams.directorate || leave.directorate === filterParams.directorate ||
+        !filterParams.department || leave.department === filterParams.department
+    ), [leaves, isShortLeave, userRole, showPendingActionsOnly, specificRoleFilter, filterParams]);
+
+  const sortedLeaves = useMemo(() =>
+    [...filteredLeaves].sort((a, b) => {
+      const aValue = sortColumn === "startDate" ? new Date(a[sortColumn]) : a[sortColumn];
+      const bValue = sortColumn === "startDate" ? new Date(b[sortColumn]) : b[sortColumn];
+      return sortDirection === "asc" ? (aValue < bValue ? -1 : aValue > bValue ? 1 : 0) : (aValue > bValue ? -1 : aValue < bValue ? 1 : 0);
+    }), [filteredLeaves, sortColumn, sortDirection]);
+
+    const paginatedLeaves = sortedLeaves.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  const handleSortMenuOpen = (event) => setSortAnchorEl(event.currentTarget);
+  const handleSortMenuClose = () => setSortAnchorEl(null);
+  const applySort = (column, direction) => {
+    handleSort(column);
+    if (sortColumn === column && sortDirection === "asc" && direction === "asc") handleSort(column);
+    handleSortMenuClose();
+  };
+/*
+ const paginatedLeaves = [...(isShortLeave ? shortLeaves : annualLeaves)]
+    .filter((leave) => {
+      const matchesDirectorate = !filterParams.directorate || leave.directorate === filterParams.directorate;
+      const matchesDepartment = !filterParams.department || leave.department === filterParams.department;
+      const matchesPending = !showPendingActionsOnly || (leave.currentApprover && leave.status === "Pending");
+      return matchesDirectorate && matchesDepartment && matchesPending;
+    })
+    .sort((a, b) => {
+      if (!sortColumn) return 0;
+      const aValue = a[sortColumn];
+      const bValue = b[sortColumn];
+      if (sortColumn === "startDate") {
+        return sortDirection === "asc"
+          ? new Date(aValue) - new Date(bValue)
+          : new Date(bValue) - new Date(aValue);
       }
-      if (valueA < valueB) return sortDirection === "asc" ? -1 : 1;
-      if (valueA > valueB) return sortDirection === "asc" ? 1 : -1;
-      return 0;
-    });
-  }, [filteredLeaves, sortColumn, sortDirection]);
+      return sortDirection === "asc"
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
+    })
+    .slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+*/
+  
+/*
+const getProgress = (leave) => {
+  if (!leave || !leave.currentApprover) return 0;
+  const approvals = leave.approvals || [];
+  const approvalSequence = ["Director", "DepartmentalHead", "HRDirector"];
+  const currentIndex = approvalSequence.indexOf(leave.currentApprover);
 
-  const paginatedLeaves = useMemo(() => {
-    return sortedLeaves.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
-  }, [sortedLeaves, currentPage, rowsPerPage]);
+  if (leave.status === "Approved" || leave.status === "Rejected") return 100;
+  if (currentIndex === -1) return 0; // All approvals complete or invalid state
 
-  const handleMenuOpen = (event, leave) => {
-    setAnchorEl(event.currentTarget);
-    setContextLeave(leave);
+  // Calculate progress based on completed approvals
+  let progress = 0;
+  if (approvals.some(a => a.approverRole === "Director" && a.status === "Approved")) progress = 33;
+  if (approvals.some(a => a.approverRole === "DepartmentalHead" && a.status === "Approved")) progress = 66;
+  if (approvals.some(a => a.approverRole === "HRDirector" && a.status === "Approved")) progress = 100;
+
+  return progress;
+};
+*/
+  // Handle export to CSV
+  const handleExport = () => {
+    const headers = [
+      "ID",
+      "Employee Name",
+      "Days Applied",
+      "Start Date",
+      "End Date",
+      "Status",
+      "Progress (%)",
+      "Person Number",
+      "Department",
+      "Directorate",
+      "Reason",
+      "Address While Away",
+      "Email",
+      "Phone",
+      "Leave Balance BF",
+      "Current Year Leave",
+      "Total Leave Days",
+      "Leave Taken This Year",
+      "Leave Balance Due",
+      "Director Name",
+      "Director Recommendation",
+      "Director Date",
+      "Departmental Head Name",
+      "Departmental Head Recommendation",
+      "Departmental Head Date",
+      "HR Director Name",
+      "HR Director Recommendation",
+      "HR Director Date",
+    ];
+
+    const rows = filteredLeaves.map((leave) => [
+      leave._id,
+      leave.employeeName,
+      leave.daysApplied,
+      new Date(leave.startDate).toLocaleDateString(),
+      new Date(leave.endDate).toLocaleDateString(),
+      leave.status,
+      Math.round(getProgress(leave)),
+      leave.personNumber || "N/A",
+      leave.department || "N/A",
+      leave.directorate || "N/A",
+      leave.reason || "N/A",
+      leave.addressWhileAway || "N/A",
+      leave.emailAddress || "N/A",
+      leave.phoneNumber || "N/A",
+      leave.leaveBalanceBF || 0,
+      leave.currentYearLeave || 0,
+      leave.totalLeaveDays || "N/A",
+      leave.leaveTakenThisYear || 0,
+      leave.leaveBalanceDue || "N/A",
+      leave.directorName || "N/A",
+      leave.directorRecommendation || "Pending",
+      leave.directorDate ? new Date(leave.directorDate).toLocaleString() : "N/A",
+      leave.departmentalHeadName || "N/A",
+      leave.departmentalHeadRecommendation || "Pending",
+      leave.departmentalHeadDate ? new Date(leave.departmentalHeadDate).toLocaleString() : "N/A",
+      leave.HRDirectorName || "N/A",
+      leave.HRDirectorRecommendation || "Pending",
+      leave.HRDirectorDate ? new Date(leave.HRDirectorDate).toLocaleString() : "N/A",
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${isShortLeave ? "short_leaves" : "annual_leaves"}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+/*
+  // Sort menu handlers
+  const handleSortMenuOpen = (event) => {
+    setSortAnchorEl(event.currentTarget);
   };
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setContextLeave(null);
+  const handleSortMenuClose = () => {
+    setSortAnchorEl(null);
   };
 
+  const applySort = (column, direction) => {
+    handleSort(column);
+    handleSort(column); // Call twice to toggle direction if same column
+    if (sortColumn === column && sortDirection === "asc" && direction === "asc") {
+      handleSort(column); // Toggle to desc if already asc
+    }
+    handleSortMenuClose();
+  };
+*/
   return (
     <>
-      <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
+      <Typography
+        variant="h5"
+        sx={{
+          mb: 4,
+          fontWeight: 700,
+          color: "#2d3748",
+          fontFamily: "'Roboto', sans-serif",
+        }}
+      >
         {isShortLeave ? "Short Leave Requests" : "Annual Leave Requests"}
       </Typography>
-      <Box sx={{ mb: 2, display: "flex", gap: 2, alignItems: "center" }}>
-        <StyledButton
-          variant={showPendingActionsOnly ? "contained" : "outlined"}
-          color="primary"
-          onClick={() => setShowPendingActionsOnly(!showPendingActionsOnly)}
-        >
-          {showPendingActionsOnly ? "Show All" : "Show Pending Only"}
-        </StyledButton>
-        {userRole === "Admin" && (
-          <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel>Filter Role</InputLabel>
-            <Select
-              value={specificRoleFilter}
-              onChange={(e) => setSpecificRoleFilter(e.target.value)}
-              label="Filter Role"
-            >
-              <MenuItem value="All">All Roles</MenuItem>
-              <MenuItem value="Supervisor">Supervisor</MenuItem>
-              <MenuItem value="SectionalHead">Sectional Head</MenuItem>
-              <MenuItem value="DepartmentalHead">Departmental Head</MenuItem>
-              <MenuItem value="HRDirector">HR Director</MenuItem>
-            </Select>
-          </FormControl>
-        )}
-        <StyledButton
-          variant="outlined"
-          onClick={() => setShowFilters(!showFilters)}
-          startIcon={showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-        >
-          {showFilters ? "Hide Filters" : "Show Filters"}
-        </StyledButton>
-        <CSVLink
-          data={sortedLeaves.map((leave) => ({
-            ID: leave._id.slice(-6),
-            Employee: leave.employeeName,
-            Days: leave.daysApplied,
-            StartDate: new Date(leave.startDate).toLocaleDateString(),
-            Status: leave.status || "Pending",
-          }))}
-          filename={`${isShortLeave ? "short" : "annual"}-leaves.csv`}
-        >
-          <StyledButton variant="outlined" startIcon={<DownloadIcon />}>Export to CSV</StyledButton>
-        </CSVLink>
-      </Box>
 
-      <Collapse in={showFilters}>
-        <Box sx={{ mb: 3, p: 2, border: "1px solid #e0e0e0", borderRadius: 2 }}>
+      {(userRole === "HRDirector" || userRole === "Admin") && (
+        <Box sx={{ mb: 3 }}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={3}>
+            <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth>
-                <InputLabel>Status</InputLabel>
+                <InputLabel>Directorate</InputLabel>
                 <Select
-                  value={filterParams.status}
-                  onChange={(e) => setFilterParams({ ...filterParams, status: e.target.value })}
-                  label="Status"
+                  value={filterParams.directorate}
+                  onChange={(e) => setFilterParams({ ...filterParams, directorate: e.target.value })}
+                  label="Directorate"
                 >
-                  <MenuItem value="">All</MenuItem>
-                  <MenuItem value="Pending">Pending</MenuItem>
-                  <MenuItem value="Approved">Approved</MenuItem>
-                  <MenuItem value="Rejected">Rejected</MenuItem>
+                  <MenuItem value="">All Directorates</MenuItem>
+                  {Array.isArray(directorates) && directorates.length > 0 ? directorates.map((dir) => (
+                    <MenuItem key={dir} value={dir}>{dir}</MenuItem>
+                  )) : <MenuItem value="" disabled>No Directorates Available</MenuItem>}
                 </Select>
               </FormControl>
             </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField
-                label="Start Date"
-                type="date"
-                value={filterParams.startDate}
-                onChange={(e) => setFilterParams({ ...filterParams, startDate: e.target.value })}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField
-                label="End Date"
-                type="date"
-                value={filterParams.endDate}
-                onChange={(e) => setFilterParams({ ...filterParams, endDate: e.target.value })}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={12} sm={3}>
-              <TextField
-                label="Employee Name"
-                value={filterParams.employeeName}
-                onChange={(e) => setFilterParams({ ...filterParams, employeeName: e.target.value })}
-                fullWidth
-              />
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Department</InputLabel>
+                <Select
+                  value={filterParams.department}
+                  onChange={(e) => setFilterParams({ ...filterParams, department: e.target.value })}
+                  label="Department"
+                >
+                 <MenuItem value="">All Departments</MenuItem>
+                  {Array.isArray(departments) && departments.length > 0 ? departments.map((dept) => (
+                    <MenuItem key={dept} value={dept}>{dept}</MenuItem>
+                  )) : <MenuItem value="" disabled>No Departments Available</MenuItem>}
+                </Select>
+              </FormControl>
             </Grid>
           </Grid>
         </Box>
-      </Collapse>
+      )}
+
+      <Box sx={{ mb: 3, display: "flex", gap: 2 }}>
+        <Button
+          variant={showPendingActionsOnly ? "contained" : "outlined"}
+          color="primary"
+          startIcon={<FilterListIcon />}
+          onClick={() => setShowPendingActionsOnly(!showPendingActionsOnly)}
+          sx={{
+            borderRadius: 2,
+            textTransform: "none",
+            fontWeight: 500,
+            bgcolor: showPendingActionsOnly ? "#1976d2" : "transparent",
+            color: showPendingActionsOnly ? "#fff" : "#1976d2",
+            "&:hover": {
+              bgcolor: showPendingActionsOnly ? "#1565c0" : "#e3f2fd",
+            },
+            px: 3,
+          }}
+        >
+          {showPendingActionsOnly ? "Show All Leaves" : "Show Pending Leaves"}
+        </Button>
+
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<SortIcon />}
+          onClick={handleSortMenuOpen}
+          sx={{
+            borderRadius: 2,
+            textTransform: "none",
+            fontWeight: 500,
+            borderColor: "#1976d2",
+            color: "#1976d2",
+            "&:hover": {
+              borderColor: "#1565c0",
+              bgcolor: "#e3f2fd",
+            },
+            px: 3,
+          }}
+        >
+          Sort Leaves</Button>
+        <Menu anchorEl={sortAnchorEl} open={Boolean(sortAnchorEl)} onClose={handleSortMenuClose} PaperProps={{ sx: { mt: 1, boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)", borderRadius: 2 } }}>
+          {["employeeName", "startDate", "status"].map((column) => ["asc", "desc"].map((dir) => (
+            <MenuItem key={`${column}-${dir}`} onClick={() => applySort(column, dir)}>
+              {`${column === "employeeName" ? "Employee Name" : column === "startDate" ? "Start Date" : "Status"} (${dir === "asc" ? "A-Z" : "Z-A"})`}
+            </MenuItem>
+          )))}
+        </Menu>
+
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<DownloadIcon />}
+          onClick={handleExport}
+          sx={{
+            borderRadius: 2,
+            textTransform: "none",
+            fontWeight: 500,
+            borderColor: "#1976d2",
+            color: "#1976d2",
+            "&:hover": {
+              borderColor: "#1565c0",
+              bgcolor: "#e3f2fd",
+            },
+            px: 3,
+          }}
+        >
+          Export Leaves
+        </Button>
+      </Box>
 
       {selectedLeaves.length > 0 && (
-        <Box sx={{ mb: 2, display: "flex", gap: 2, position: "sticky", top: 0, bgcolor: "background.paper", zIndex: 1 }}>
-          <StyledButton variant="contained" color="success" onClick={() => handleBulkAction("Approve")}>
-            Approve Selected
-          </StyledButton>
-          <StyledButton variant="outlined" color="error" onClick={() => handleBulkAction("Reject")}>
-            Reject Selected
-          </StyledButton>
+        <Box
+          sx={{
+            mb: 3,
+            display: "flex",
+            gap: 2,
+            position: "sticky",
+            top: 0,
+            bgcolor: "#fafafa",
+            zIndex: 1,
+            p: 1,
+            borderRadius: 2,
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.03)",
+          }}
+        >
+          <Button
+            variant="contained"
+            color="success"
+            onClick={() => handleBulkAction("approve")}
+            disabled={isActionLoading || selectedLeaves.length === 0}
+            sx={{
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              bgcolor: "#38a169",
+              "&:hover": { bgcolor: "#2f855a" },
+              px: 3,
+            }}
+          >
+           {isActionLoading ? <CircularProgress size={24} /> : "Approve Selected"}
+          </Button>
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => handleBulkAction("reject")}
+            disabled={isActionLoading || selectedLeaves.length === 0}
+            sx={{
+              borderRadius: 2,
+              textTransform: "none",
+              fontWeight: 500,
+              borderColor: "#e53e3e",
+              color: "#e53e3e",
+              "&:hover": { borderColor: "#c53030", color: "#c53030", bgcolor: "#fefcbf" },
+              px: 3,
+            }}
+          >
+            {isActionLoading ? <CircularProgress size={24} /> : "Reject Selected"}
+          </Button>
         </Box>
       )}
 
-      <TableContainer sx={{ maxHeight: 500, overflowX: "auto" }}>
+      <TableContainer
+        sx={{
+          maxHeight: 500,
+          overflowX: "auto",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
+          borderRadius: 2,
+          border: "1px solid #e0e0e0",
+          bgcolor: "#fff",
+        }}
+      >
         <Table stickyHeader sx={{ minWidth: "1200px" }}>
           <TableHead>
             <TableRow>
-              <TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#f7fafc",
+                  color: "#2d3748",
+                  borderBottom: "2px solid #e0e0e0",
+                  px: 3,
+                  py: 2,
+                }}
+              >
                 <Checkbox
                   checked={paginatedLeaves.length > 0 && selectedLeaves.length === paginatedLeaves.length}
                   onChange={(e) => {
@@ -676,80 +655,391 @@ const LeaveTable = ({
                     else setSelectedLeaves([]);
                   }}
                   aria-label="Select all leaves"
+                  sx={{ color: "#718096", "&.Mui-checked": { color: "#1976d2" } }}
                 />
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }} onClick={() => handleSort("employeeName")}>
+              <TableCell
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#f7fafc",
+                  color: "#2d3748",
+                  borderBottom: "2px solid #e0e0e0",
+                  px: 3,
+                  py: 2,
+                }}
+                onClick={() => handleSort("employeeName")}
+              >
                 Employee {sortColumn === "employeeName" && (sortDirection === "asc" ? "↑" : "↓")}
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }}>Days</TableCell>
-              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }} onClick={() => handleSort("startDate")}>
+              <TableCell
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#f7fafc",
+                  color: "#2d3748",
+                  borderBottom: "2px solid #e0e0e0",
+                  px: 3,
+                  py: 2,
+                }}
+              >
+                Days
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#f7fafc",
+                  color: "#2d3748",
+                  borderBottom: "2px solid #e0e0e0",
+                  px: 3,
+                  py: 2,
+                }}
+                onClick={() => handleSort("startDate")}
+              >
                 Start Date {sortColumn === "startDate" && (sortDirection === "asc" ? "↑" : "↓")}
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }}>End Date</TableCell>
-              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }} onClick={() => handleSort("status")}>
+              <TableCell
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#f7fafc",
+                  color: "#2d3748",
+                  borderBottom: "2px solid #e0e0e0",
+                  px: 3,
+                  py: 2,
+                }}
+              >
+                End Date
+              </TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#f7fafc",
+                  color: "#2d3748",
+                  borderBottom: "2px solid #e0e0e0",
+                  px: 3,
+                  py: 2,
+                }}
+                onClick={() => handleSort("status")}
+              >
                 Status {sortColumn === "status" && (sortDirection === "asc" ? "↑" : "↓")}
               </TableCell>
-              <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5" }}>Actions</TableCell>
+              <TableCell
+                sx={{
+                  fontWeight: 700,
+                  bgcolor: "#f7fafc",
+                  color: "#2d3748",
+                  borderBottom: "2px solid #e0e0e0",
+                  px: 3,
+                  py: 2,
+                }}
+              >
+                Progress
+              </TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {paginatedLeaves.length > 0 ? (
               paginatedLeaves.map((leave) => (
-                <TableRow
-                  key={leave._id}
-                  hover
-                  sx={{
-                    "&:hover": { bgcolor: "#f0f0f0" },
-                    bgcolor: getRowBackgroundColor(leave),
-                    transition: "background-color 0.3s ease",
-                  }}
-                >
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedLeaves.includes(leave._id)}
-                      onChange={(e) => {
-                        if (e.target.checked) setSelectedLeaves([...selectedLeaves, leave._id]);
-                        else setSelectedLeaves(selectedLeaves.filter((id) => id !== leave._id));
-                      }}
-                      aria-label={`Select leave ${leave._id}`}
-                    />
-                  </TableCell>
-                  <TableCell>{leave.employeeName}</TableCell>
-                  <TableCell>{leave.daysApplied}</TableCell>
-                  <TableCell>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
-                  <TableCell>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <Tooltip title={leave.status}>
-                      {getStatusChip(leave)}
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell>
-                    <IconButton
-                      aria-label="more actions"
-                      onClick={(e) => handleMenuOpen(e, leave)}
-                    >
-                      <MoreVertIcon />
-                    </IconButton>
-                    <Menu
-                      anchorEl={anchorEl}
-                      open={Boolean(anchorEl) && contextLeave?._id === leave._id}
-                      onClose={handleMenuClose}
-                    >
-                      <MenuItem onClick={() => { handleViewDetails(leave); handleMenuClose(); }}>View Details</MenuItem>
-                      {(userRole === "HRDirector" || userRole === "Admin") && (
-                        <>
-                          <MenuItem onClick={() => { handleEditClick(leave); handleMenuClose(); }}>Edit</MenuItem>
-                          <MenuItem onClick={() => { handleDeleteClick(leave._id); handleMenuClose(); }}>Delete</MenuItem>
-                        </>
+                <>
+                  <TableRow
+                    key={leave._id}
+                    hover
+                    onClick={() => setExpandedLeaveId(expandedLeaveId === leave._id ? null : leave._id)}
+                    sx={{
+                      "&:hover": { bgcolor: "#edf2f7" },
+                      bgcolor: isActiveLeave(leave) ? "#e6fffa" : "inherit",
+                      transition: "background-color 0.3s ease",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <TableCell sx={{ px: 3, py: 2 }}>
+                      <Checkbox
+                        checked={selectedLeaves.includes(leave._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) setSelectedLeaves([...selectedLeaves, leave._id]);
+                          else setSelectedLeaves(selectedLeaves.filter((id) => id !== leave._id));
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`Select leave ${leave._id}`}
+                        sx={{ color: "#718096", "&.Mui-checked": { color: "#1976d2" } }}
+                      />
+                    </TableCell>
+                    <TableCell sx={{ px: 3, py: 2, color: "#4a5568" }}>{leave.employeeName}</TableCell>
+                    <TableCell sx={{ px: 3, py: 2, color: "#4a5568" }}>{leave.daysApplied}</TableCell>
+                    <TableCell sx={{ px: 3, py: 2, color: "#4a5568" }}>
+                      {new Date(leave.startDate).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell sx={{ px: 3, py: 2, color: "#4a5568" }}>
+                      {new Date(leave.endDate).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell sx={{ px: 3, py: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                      <Tooltip title={leave.status}>
+                        {getStatusChip(leave)}
+                      </Tooltip>
+                      {expandedLeaveId === leave._id ? (
+                        <ExpandLessIcon sx={{ color: "#718096" }} />
+                      ) : (
+                        <ExpandMoreIcon sx={{ color: "#718096" }} />
                       )}
-                    </Menu>
-                  </TableCell>
-                </TableRow>
+                    </TableCell>
+                    <TableCell sx={{ px: 3, py: 2 }}>
+  <Box sx={{ display: "flex", alignItems: "center" }}>
+    <Box sx={{ width: "100%", mr: 1 }}>
+      <LinearProgress
+        variant="determinate"
+        value={progressMap[leave._id] || getProgress(leave)} // Use state-based progress if available
+        sx={{
+          "& .MuiLinearProgress-bar": {
+            bgcolor: "#1976d2",
+          },
+        }}
+      />
+    </Box>
+    <Box sx={{ minWidth: 35 }}>
+      <Typography variant="body2" sx={{ color: "#718096" }}>
+        {`${Math.round(progressMap[leave._id] || getProgress(leave))}%`}
+      </Typography>
+    </Box>
+  </Box>
+</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ padding: 0, borderBottom: "1px solid #e0e0e0" }}>
+                      <Collapse in={expandedLeaveId === leave._id} timeout="auto" unmountOnExit>
+                        <Box
+                          sx={{
+                            p: 3,
+                            bgcolor: "linear-gradient(145deg, #f7fafc, #edf2f7)",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: 2,
+                            mx: 2,
+                            mb: 2,
+                            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.03)",
+                          }}
+                        >
+                          <Typography
+                            variant="h6"
+                            gutterBottom
+                            sx={{ fontWeight: 600, color: "#2d3748", mb: 3 }}
+                          >
+                            Leave Details
+                          </Typography>
+                          <Box sx={{ mb: 3 }}>
+                            <Typography
+                              variant="subtitle1"
+                              sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}
+                            >
+                              Employee Information
+                            </Typography>
+                            <Grid container spacing={3}>
+                              <Grid item xs={12} sm={6}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>ID:</strong> {leave._id}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Employee:</strong> {leave.employeeName}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Person Number:</strong> {leave.personNumber || "N/A"}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} sm={6}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Department:</strong> {leave.department || "N/A"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Directorate:</strong> {leave.directorate || "N/A"}
+                                </Typography>
+                              </Grid>
+                            </Grid>
+                          </Box>
+                          <Box sx={{ mb: 3 }}>
+                            <Typography
+                              variant="subtitle1"
+                              sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}
+                            >
+                              Leave Details
+                            </Typography>
+                            <Grid container spacing={3}>
+                              <Grid item xs={12} sm={6}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Days Applied:</strong> {leave.daysApplied}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Start Date:</strong>{" "}
+                                  {new Date(leave.startDate).toLocaleDateString()}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>End Date:</strong>{" "}
+                                  {new Date(leave.endDate).toLocaleDateString()}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Reason:</strong> {leave.reason || "N/A"}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} sm={6}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Address While Away:</strong>{" "}
+                                  {leave.addressWhileAway || "N/A"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Email:</strong> {leave.emailAddress || "N/A"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Phone:</strong> {leave.phoneNumber || "N/A"}
+                                </Typography>
+                              </Grid>
+                            </Grid>
+                          </Box>
+                          <Box sx={{ mb: 3 }}>
+                            <Typography
+                              variant="subtitle1"
+                              sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}
+                            >
+                              Leave Balance
+                            </Typography>
+                            <Grid container spacing={3}>
+                              <Grid item xs={12} sm={6}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Leave Balance BF:</strong> {leave.leaveBalanceBF || 0}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Current Year Leave:</strong> {leave.currentYearLeave || 0}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Total Leave Days:</strong> {leave.totalLeaveDays || "N/A"}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} sm={6}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Leave Taken This Year:</strong>{" "}
+                                  {leave.leaveTakenThisYear || 0}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Leave Balance Due:</strong> {leave.leaveBalanceDue || "N/A"}
+                                </Typography>
+                              </Grid>
+                            </Grid>
+                          </Box>
+                          <Box sx={{ mb: 3 }}>
+                            <Typography
+                              variant="subtitle1"
+                              sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}
+                            >
+                               Approvals
+                            </Typography>
+                            <Grid container spacing={3}>
+                              <Grid item xs={12} sm={4}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Director:</strong> {leave.directorName || "N/A"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Recommendation:</strong>{" "}
+                                  {leave.directorRecommendation || "Pending"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Date:</strong>{" "}
+                                  {leave.directorDate
+                                    ? new Date(leave.directorDate).toLocaleString()
+                                    : "N/A"}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} sm={4}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Departmental Head:</strong> {leave.departmentalHeadName || "N/A"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Recommendation:</strong>{" "}
+                                  {leave.departmentalHeadRecommendation || "Pending"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Date:</strong>{" "}
+                                  {leave.departmentalHeadDate
+                                    ? new Date(leave.departmentalHeadDate).toLocaleString()
+                                    : "N/A"}
+                                </Typography>
+                              </Grid>
+                              <Grid item xs={12} sm={4}>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>HR Director:</strong> {leave.HRDirectorName || "N/A"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Recommendation:</strong>{" "}
+                                  {leave.HRDirectorRecommendation || "Pending"}
+                                </Typography>
+                                <Typography sx={{ color: "#718096", mb: 1 }}>
+                                  <strong>Date:</strong>{" "}
+                                  {leave.HRDirectorDate
+                                    ? new Date(leave.HRDirectorDate).toLocaleString()
+                                    : "N/A"}
+                                </Typography>
+                              </Grid>
+                            </Grid>
+                          </Box>
+                          <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3, gap: 2 }}>
+                          <Button
+                              variant="contained"
+                              color="success"
+                              onClick={() => handleAction(leave._id, "approve")}
+                              disabled={isActionLoading}
+                              sx={{ 
+                                borderRadius: 2,
+                                  textTransform: "none",
+                                  fontWeight: 500,
+                                  px: 3, 
+                                }}
+                                >
+                                 {isActionLoading ? <CircularProgress size={24} /> : "approve"}
+                          </Button>
+                          <Button
+                              variant="outlined"
+                                color="error"
+                               onClick={() => handleAction(leave._id, "reject")}
+                               disabled={isActionLoading}
+                                sx={{
+                                  borderRadius: 2,
+                                  textTransform: "none",
+                                  fontWeight: 500,
+                                  px: 3,
+                                 }}
+                                 >
+                                  {isActionLoading ? <CircularProgress size={24} /> : "reject"}
+                           </Button>
+                           </Box>
+                          {(userRole === "HRDirector" || userRole === "Admin") && (
+                            <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
+                              <Button
+                                variant="contained"
+                                color="error"
+                                onClick={() => handleDeleteClick(leave._id)}
+                                sx={{
+                                  borderRadius: 2,
+                                  textTransform: "none",
+                                  fontWeight: 500,
+                                  bgcolor: "#e53e3e",
+                                  "&:hover": { bgcolor: "#c53030" },
+                                  px: 3,
+                                }}
+                              >
+                                Delete
+                              </Button>
+                            </Box>
+                          )}
+                        </Box>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={7} align="center">
-                  {showPendingActionsOnly ? "No pending actions for your role" : `No ${isShortLeave ? "short" : "annual"} leave requests found`}
+                <TableCell
+                  colSpan={7}
+                  align="center"
+                  sx={{ py: 4, color: "#718096", fontStyle: "italic" }}
+                >
+                  {showPendingActionsOnly
+                    ? "No pending actions for your role"
+                    : `No ${isShortLeave ? "short" : "annual"} leave requests found`}
                 </TableCell>
               </TableRow>
             )}
@@ -760,12 +1050,23 @@ const LeaveTable = ({
         count={Math.ceil(filteredLeaves.length / rowsPerPage)}
         page={currentPage}
         onChange={(e, page) => setCurrentPage(page)}
-        sx={{ mt: 2, display: "flex", justifyContent: "center" }}
+        sx={{
+          mt: 3,
+          display: "flex",
+          justifyContent: "center",
+          "& .MuiPaginationItem-root": {
+            color: "#4a5568",
+            "&.Mui-selected": {
+              bgcolor: "#1976d2",
+              color: "#fff",
+              "&:hover": { bgcolor: "#1565c0" },
+            },
+          },
+        }}
       />
     </>
   );
 };
-
 
 const AdminDashboard = () => {
   const { token, logout, user } = useContext(AuthContext);
@@ -782,9 +1083,7 @@ const AdminDashboard = () => {
   const [isFetchingEvents, setIsFetchingEvents] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("Leave Analytics");
-  const [selectedLeave, setSelectedLeave] = useState(null);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showPendingActionsOnly, setShowPendingActionsOnly] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
@@ -792,16 +1091,13 @@ const AdminDashboard = () => {
     phoneNumber: "",
     profilePicture: null,
     chiefOfficerName: "",
-    supervisorName: "",
     personNumber: "",
     email: "",
-    sector: "",
-    sectionalHeadName: "",
+    directorate: "",
+    directorName: "",
     departmentalHeadName: "",
     HRDirectorName: "",
   });
-  const [formErrors, setFormErrors] = useState({});
-  // New state for search functionality on the main page
   const [users, setUsers] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [searchParams, setSearchParams] = useState({
@@ -811,31 +1107,61 @@ const AdminDashboard = () => {
   });
   const [selectedLeaves, setSelectedLeaves] = useState([]);
   const [specificRoleFilter, setSpecificRoleFilter] = useState("All");
-  const [filterParams, setFilterParams] = useState({ status: "", startDate: "", endDate: "", employeeName: "" });
+  const [filterParams, setFilterParams] = useState({
+    status: "",
+    startDate: "",
+    endDate: "",
+    employeeName: "",
+    directorate: "",
+    department: "",
+  });
   const [sortColumn, setSortColumn] = useState("startDate");
   const [sortDirection, setSortDirection] = useState("asc");
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage] = useState(10);
+  const [directorates, setDirectorates] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [expandedLeaveId, setExpandedLeaveId] = useState(null);
+  const [messageActive, setMessageActive] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isActionLoading, setIsActionLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressMap, setProgressMap] = useState({});
   const localToken = localStorage.getItem("token");
   const effectiveToken = token || localToken;
   const effectiveUser = user || JSON.parse(localStorage.getItem("user") || "{}");
+  const [socket,setSocket] = useState(null);
 
-  const [socket, setSocket] = useState(null);
 
-  const fetchLeaves = useCallback(async () => {
+   useEffect(() => {
+  const fetchMetadata = async () => {
+      try {
+        const response = await apiClient.get("/api/metadata");
+        console.log("Metadata response:", response.data);
+        setDepartments(response.data.departments || []);
+        setDirectorates(response.data.directorates || []);
+      } catch (error) {
+        console.error("Error fetching metadata:", error);
+        setDepartments([]);
+        setDirectorates([]);
+      }
+    };
+    fetchMetadata();
+  }, []);
+
+  const fetchLeaves = useCallback(async (leaveType) => {
     try {
-      const [shortRes, annualRes] = await Promise.all([
-        apiClient.get("/api/leaves/admin/leaves?leaveType=Short%20Leave", {
-          headers: { Authorization: `Bearer ${effectiveToken}` },
-          timeout: 5000,
-        }),
-        apiClient.get("/api/leaves/admin/leaves?leaveType=Annual%20Leave", {
-          headers: { Authorization: `Bearer ${effectiveToken}` },
-          timeout: 5000,
-        }),
-      ]);
-      setShortLeaves(Array.isArray(shortRes.data) ? shortRes.data : []);
-      setAnnualLeaves(Array.isArray(annualRes.data) ? annualRes.data : []);
+      let query = `leaveType=${leaveType}`;
+     if (effectiveUser.role === "Director" && profile?.directorate) query += `&directorate=${profile.directorate}`;
+      else if (effectiveUser.role === "DepartmentalHead" && profile?.department) query += `&department=${profile.department}`;
+
+      const res = await apiClient.get(`/api/leaves/admin/leaves?${query}`, {
+        headers: { Authorization: `Bearer ${effectiveToken}` },
+        timeout: 5000,
+      });
+      console.log(`Fetched ${leaveType} leaves:`, res.data);
+      if (leaveType === "Short Leave") setShortLeaves(Array.isArray(res.data) ? res.data : []);
+      else setAnnualLeaves(Array.isArray(res.data) ? res.data : []);
     } catch (error) {
       const errorMessage = error.response?.data?.error || "Failed to fetch leaves";
       setMessage({ type: "error", text: errorMessage });
@@ -847,10 +1173,8 @@ const AdminDashboard = () => {
         setMessage({ type: "error", text: "You do not have permission to view leaves" });
         addNotification("You do not have permission to view leaves", "error");
       }
-    } finally {
-      setIsLoading(false);
     }
-  }, [effectiveToken]);
+  }, [effectiveToken, effectiveUser, profile]);
 
   const fetchProfile = async () => {
     try {
@@ -865,11 +1189,10 @@ const AdminDashboard = () => {
         phoneNumber: res.data.phoneNumber || "",
         profilePicture: null,
         chiefOfficerName: res.data.chiefOfficerName || "",
-        supervisorName: res.data.supervisorName || "",
         personNumber: res.data.personNumber || "",
         email: res.data.email || "",
-        sector: res.data.sector || "",
-        sectionalHeadName: res.data.sectionalHeadName || "",
+        directorate: res.data.directorate || "",
+        directorName: res.data.directorName || "",
         departmentalHeadName: res.data.departmentalHeadName || "",
         HRDirectorName: res.data.HRDirectorName || "",
       });
@@ -912,7 +1235,7 @@ const AdminDashboard = () => {
       setIsFetchingEvents(false);
     }
   };
-
+  
   const fetchStats = async () => {
     try {
       const response = await apiClient.get("/api/leaves/stats", {
@@ -934,8 +1257,8 @@ const AdminDashboard = () => {
       setUsers(response.data);
     } catch (error) {
       const errorMessage = error.response?.data?.status === 404
-      ? "Users endpoint not found (404). Check backend route setup for /api/users. Server logs may help."
-      : error.response?.data?.error || `Access denied: Your role (${effectiveUser.role}) may not have permission.`;
+        ? "Users endpoint not found (404). Check backend route setup for /api/users."
+        : error.response?.data?.error || `Access denied: Your role (${effectiveUser.role}) may not have permission.`;
       setMessage({ type: "error", text: errorMessage });
       addNotification(errorMessage, "error");
     }
@@ -954,6 +1277,48 @@ const AdminDashboard = () => {
       addNotification(errorMessage, "error");
     }
   };
+/*
+  const fetchOptions = async () => {
+    setIsFetchingOptions(true);
+    try {
+      const [directoratesResp, deptsResp] = await Promise.all([
+        apiClient.get("/api/directorates"),
+        apiClient.get("/api/departments-directorates"),
+      ]);
+      setDirectorates(directoratesResp.data);
+      setDepartments(deptsResp.data);
+    } catch (error) {
+      const errorMessage = error.response?.data?.error || "Failed to fetch options";
+      setMessage({ type: "error", text: errorMessage });
+      addNotification(errorMessage, "error");
+    } finally {
+      setIsFetchingOptions(false);
+    }
+  };
+*/
+  const getStatusCounts = (leaves) => {
+    const counts = {
+      Total: { total: leaves.length, Annual: 0, Short: 0 },
+      Pending: { total: 0, Annual: 0, Short: 0 },
+      Approved: { total: 0, Annual: 0, Short: 0 },
+      Rejected: { total: 0, Annual: 0, Short: 0 },
+      RecommendedByDirector: { total: 0, Annual: 0, Short: 0 },
+      RecommendedByDepartmental: { total: 0, Annual: 0, Short: 0 },
+    };
+
+    leaves.forEach((leave) => {
+      const leaveTypeKey = leave.leaveType === "Annual Leave" ? "Annual" : "Short";
+      if (counts.hasOwnProperty(leave.status)) {
+        counts[leave.status].total++;
+        counts[leave.status][leaveTypeKey]++;
+      }
+      counts.Total[leaveTypeKey]++;
+    });
+
+    return counts;
+  };
+
+  const statusCounts = useMemo(() => getStatusCounts(leaves), [leaves]);
 
   useEffect(() => {
     if (!effectiveToken) {
@@ -961,7 +1326,7 @@ const AdminDashboard = () => {
       return;
     }
 
-    const newSocket = io("http://localhost:5000", {
+    const socketInstance = io("http://localhost:5000", {
       auth: { token: effectiveToken },
       transports: ["websocket"],
       reconnection: true,
@@ -969,176 +1334,152 @@ const AdminDashboard = () => {
       reconnectionDelay: 1000,
     });
 
-    setSocket(newSocket);
-
-    newSocket.on("connect", () => {
+    socketInstance.on("connect", () => {
       console.log("WebSocket connected");
     });
+/*
+    if (selectedDirectorate) {
+      socket.emit('subscribe', { room: `directorate_${selectedDirectorate}` });
+    }
 
-    newSocket.on("connect_error", (error) => {
+    socketInstance.on('rosterUpdate', (data) => {
+      if ((data.directorate === selectedDirectorate || !selectedDirectorate) && (data.department === selectedDepartment || !selectedDepartment)) {
+        // Handle roster updates if needed
+      }
+    });
+*/
+    socketInstance.on('leaveUpdate', (data) => {
+      console.log("Received leaveUpdate: ", data)
+   setProgressMap((prev) => ({ ...prev, [data.leaveId]: data.progress || 0 }));
+    setShortLeaves((prev) =>
+      prev.map((leave) => (leave._id === data.leaveId ? { ...leave, status: data.status, progress: data.progress || 0, currentApprover: data.currentApprover } : leave))
+    );
+    setAnnualLeaves((prev) =>
+      prev.map((leave) => (leave._id === data.leaveId ? { ...leave, status: data.status, progress: data.progress || 0, currentApprover: data.currentApprover } : leave))
+    );
+    setLeaves((prev) =>
+        prev.map((leave) =>
+          leave._id === data.leaveId
+            ? { ...leave, status: data.status, progress: data.progress || 0, currentApprover: data.currentApprover }
+            : leave
+        )
+      );
+  });
+
+    socketInstance.on("connect_error", (error) => {
       console.error("WebSocket connection error:", error);
       setMessage({ type: "error", text: "Failed to connect to real-time updates" });
       addNotification("Failed to connect to real-time updates", "error");
+      setMessageActive(true);
     });
 
-    newSocket.on("disconnect", (reason) => {
+    socketInstance.on("disconnect", (reason) => {
       console.log("WebSocket disconnected. Reason:", reason);
     });
 
-    newSocket.on("leaveStatusUpdate", (updatedLeave) => {
-      fetchLeaves();
-      if (selectedLeave && selectedLeave._id === updatedLeave._id) {
-        setSelectedLeave(updatedLeave);
-      }
-    });
+    setSocket(socketInstance);
+
+    Promise.all([fetchLeaves("Short Leave"), fetchLeaves("Annual Leave"), fetchLeaveEvents()]);
 
     return () => {
-      newSocket.disconnect();
+      socketInstance.disconnect();
     };
-  }, [effectiveToken, navigate]);
+  }, []);
 
   useEffect(() => {
-  if (!effectiveToken || !effectiveUser || !effectiveUser?.role) {
-    navigate("/login");
-    return;
-  }
+    if (message.text) {
+      setMessageActive(true);
+      const timer = setTimeout(() => setMessageActive(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
 
-  console.log("Current role:", effectiveUser.role);
+  useEffect(() => {
+    if (!effectiveToken || !effectiveUser || !effectiveUser?.role) {
+      navigate("/login");
+      return;
+    }
 
-    const allowedRoles = ["Admin", "Supervisor", "SectionalHead", "DepartmentalHead", "HRDirector"];
+    console.log("Current role:", effectiveUser.role);
+
+    const allowedRoles = ["Admin", "Director", "DepartmentalHead", "HRDirector"];
     console.log(`User role '${effectiveUser.role}' is allowed?`, allowedRoles.includes(effectiveUser.role));
     if (!allowedRoles.includes(effectiveUser.role)) {
       setMessage({ type: "error", text: `Access restricted to roles: ${allowedRoles.join(", ")}` });
       addNotification(`Access restricted to roles: ${allowedRoles.join(", ")}`, "error");
       return;
     }
-    
+
     const fetchData = async () => {
       setIsLoading(true);
-      await Promise.all([fetchLeaves(), fetchProfile(), fetchLeaveEvents(), fetchStats(), fetchUsers()]);
+      await Promise.all([fetchLeaves("Short Leave"),fetchLeaves("Annual Leave"), fetchProfile(), fetchLeaveEvents(), fetchStats(), fetchUsers()]);
       setIsLoading(false);
+      setIsAuthReady(true);
     };
 
     fetchData();
-  }, [effectiveToken]);
+  }, []);
 
   const handleAction = async (leaveId, action) => {
-    try {
-      const leave = [...shortLeaves, ...annualLeaves].find((l) => l._id === leaveId);
-      if (!leave) {
-        setMessage({ type: "error", text: "Leave not found" });
-        addNotification("Leave not found", "error");
-        return;
-      }
+  setIsActionLoading(true);
+  try {
+    console.log(`handleAction called: leaveId=${leaveId}, action=${action}`);
+    const response = await apiClient.get(`/api/leaves/admin/leaves?leaveType=Annual Leave`);
+    const leaves = response.data;
+    const leave = [...shortLeaves, ...annualLeaves].find((l) => l._id === leaveId);
+    if (!leave) {
+      throw new Error("Leave not found");
+    }
+    console.log("Leave state:", { currentApprover: leave.currentApprover, status: leave.status, directorDate: leave.directorDate });
+    if (effectiveUser.role !== leave.currentApprover && effectiveUser.role !== "Admin") {
+      throw new Error("Not your turn to approve");
+    }
+    const actionMap = {
+      approve: "Approved",
+      reject: "Rejected",
+    };
+    const normalizedAction = actionMap[action.toLowerCase()];
+    if (!normalizedAction) {
+      throw new Error("Invalid action. Must be 'approve' or 'reject'");
+    }
 
-      const updates = {};
-      const currentDate = new Date().toISOString();
-      const isShortLeave = shortLeaves.some((l) => l._id === leaveId);
+    const updates = {
+        status: normalizedAction,
+        comment: `${normalizedAction.toLowerCase()}ed by ${effectiveUser.role}`,
+      };
 
-      if (effectiveUser.role === "Supervisor" && isShortLeave) {
-        updates.sectionalHeadRecommendation = action;
-        updates.sectionalHeadDate = currentDate;
-        updates.status = action === "Recommended" ? "RecommendedBySectional" : "Pending";
-      } else if (effectiveUser.role === "SectionalHead" && !isShortLeave) {
-        updates.sectionalHeadRecommendation = action;
-        updates.sectionalHeadDate = currentDate;
-        updates.status = action === "Recommended" ? "RecommendedBySectional" : "Pending";
-      } else if (effectiveUser.role === "DepartmentalHead" && !isShortLeave) {
-        updates.departmentalHeadRecommendation = action;
-        updates.departmentalHeadDate = currentDate;
-        updates.departmentalHeadDaysGranted = leave.daysApplied;
-        updates.departmentalHeadStartDate = leave.startDate;
-        updates.departmentalHeadLastDate = leave.endDate;
-        updates.departmentalHeadResumeDate = calculateNextWorkingDay(leave.endDate);
-        updates.status = action === "Recommended" ? "RecommendedByDepartmental" : "RecommendedBySectional";
-      } else if (effectiveUser.role === "HRDirector") {
-        updates.approverRecommendation = action === "Approve" ? "Approved" : "Not Approved";
-        updates.approverDate = currentDate;
-        updates.status = action === "Approve" ? "Approved" : "Rejected";
-        if (!leave.sectionalHeadRecommendation) {
-          updates.sectionalHeadRecommendation = "Recommended";
-          updates.sectionalHeadDate = currentDate;
-        }
-        if (!leave.departmentalHeadRecommendation && !isShortLeave) {
-          updates.departmentalHeadRecommendation = "Recommended";
-          updates.departmentalHeadDate = currentDate;
-          updates.departmentalHeadDaysGranted = leave.daysApplied;
-          updates.departmentalHeadStartDate = leave.startDate;
-          updates.departmentalHeadLastDate = leave.endDate;
-          updates.departmentalHeadResumeDate = calculateNextWorkingDay(leave.endDate);
-        }
-      } else if (effectiveUser.role === "Admin") {
-        if (isShortLeave) {
-          if (action === "Approve" || action === "Reject") {
-            updates.approverRecommendation = action === "Approve" ? "Approved" : "Not Approved";
-            updates.approverDate = currentDate;
-            updates.status = action === "Approve" ? "Approved" : "Rejected";
-            if (!leave.sectionalHeadRecommendation) {
-              updates.sectionalHeadRecommendation = "Recommended";
-              updates.sectionalHeadDate = currentDate;
-            }
-          } else {
-            updates.sectionalHeadRecommendation = action;
-            updates.sectionalHeadDate = currentDate;
-            updates.status = action === "Recommended" ? "RecommendedBySectional" : "Pending";
-          }
-        } else {
-          if (action === "Approve" || action === "Reject") {
-            updates.approverRecommendation = action === "Approve" ? "Approved" : "Not Approved";
-            updates.approverDate = currentDate;
-            updates.status = action === "Approve" ? "Approved" : "Rejected";
-            if (!leave.sectionalHeadRecommendation) {
-              updates.sectionalHeadRecommendation = "Recommended";
-              updates.sectionalHeadDate = currentDate;
-            }
-            if (!leave.departmentalHeadRecommendation) {
-              updates.departmentalHeadRecommendation = "Recommended";
-              updates.departmentalHeadDate = currentDate;
-              updates.departmentalHeadDaysGranted = leave.daysApplied;
-              updates.departmentalHeadStartDate = leave.startDate;
-              updates.departmentalHeadLastDate = leave.endDate;
-              updates.departmentalHeadResumeDate = calculateNextWorkingDay(leave.endDate);
-            }
-          } else if (action === "Recommended" || action === "Not Recommended") {
-            if (!leave.sectionalHeadRecommendation) {
-              updates.sectionalHeadRecommendation = action;
-              updates.sectionalHeadDate = currentDate;
-              updates.status = action === "Recommended" ? "RecommendedBySectional" : "Pending";
-            } else if (!leave.departmentalHeadRecommendation) {
-              updates.departmentalHeadRecommendation = action;
-              updates.departmentalHeadDate = currentDate;
-              updates.departmentalHeadDaysGranted = leave.daysApplied;
-              updates.departmentalHeadStartDate = leave.startDate;
-              updates.departmentalHeadLastDate = leave.endDate;
-              updates.departmentalHeadResumeDate = calculateNextWorkingDay(leave.endDate);
-              updates.status = action === "Recommended" ? "RecommendedByDepartmental" : "RecommendedBySectional";
-            }
-          }
-        }
-      }
-      if (Object.keys(updates).length === 0) {
-        setMessage({ type: "error", text: "Not authorized to perform this action" });
-        addNotification("Not authorized to perform this action", "error");
-        return;
-      }
-
-      await apiClient.patch(`/api/leaves/admin/leaves/${leaveId}`, updates, {
-        headers: { Authorization: `Bearer ${effectiveToken}` },
-      });
-
-      setMessage({ type: "success", text: `Leave ${action.toLowerCase()} successfully` });
-      addNotification(`Leave ${action.toLowerCase()} successfully`, "success");
-   } catch (error) {
-    const errorMessage = error.response?.data?.error || "Failed to update leave";
+    const patchResponse = await apiClient.patch(`/api/leaves/approve/${leaveId}`, updates);
+    if (patchResponse.data?.error) {
+      throw new Error(patchResponse.data.error);
+    }
+    const updatedLeave = patchResponse.data;
+    setMessage({ type: "success", text: `Leave ${normalizedAction.toLowerCase()}d successfully` });
+    setMessageActive(true);
+    const { progress } = patchResponse.data;
+   setProgressMap((prev) => ({ ...prev, [leaveId]: progress || 0 })); // Update progress bar
+   // Update both short and annual leaves with the full response
+    setShortLeaves((prev) => prev.map(l => l._id === leaveId ? updatedLeave : l));
+    setAnnualLeaves((prev) => prev.map(l => l._id === leaveId ? updatedLeave : l));
+    await Promise.all([fetchLeaves("Short Leave"), fetchLeaves("Annual Leave"), fetchLeaveEvents()]);
+  } catch (error) {
+    const errorMessage = error.response?.data?.error || error.message || "Failed to update leave - unknown error";
+    console.error("Error in handleAction:", {
+      message: errorMessage,
+      status: error.response?.status,
+      fullError: error,
+    });
     setMessage({ type: "error", text: errorMessage });
-    addNotification(errorMessage, "error");
+    setMessageActive(true);
     if (error.response?.status === 401) {
+      setMessage({ type: "error", text: "Unauthorized - logging out" });
       logout();
       navigate("/login");
     } else if (error.response?.status === 403) {
       setMessage({ type: "error", text: "You do not have permission to perform this action" });
-      addNotification("You do not have permission to perform this action", "error");
     }
+    await Promise.all([fetchLeaves("Short Leave"), fetchLeaves("Annual Leave")]);
+  } finally {
+    setIsActionLoading(false);
   }
 };
 
@@ -1157,14 +1498,6 @@ const AdminDashboard = () => {
       setActiveSection(section);
       setDrawerOpen(false);
     }
-  };
-
-  const handleViewDetails = (leave) => {
-    setSelectedLeave(leave);
-  };
-
-  const handleCloseModal = () => {
-    setSelectedLeave(null);
   };
 
   const handleCloseEventModal = () => {
@@ -1187,27 +1520,13 @@ const AdminDashboard = () => {
         return <Chip label="Approved" color="success" size="small" />;
       case "Rejected":
         return <Chip label="Rejected" color="error" size="small" />;
-      case "RecommendedBySectional":
-        return <Chip label="Recommended by Sectional" color="info" size="small" />;
-      case "RecommendedByDepartmental":
-        return <Chip label="Recommended by Departmental" color="info" size="small" />;
       case "Pending":
       default:
         return <Chip label="Pending" color="warning" size="small" />;
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value, files } = e.target;
-    if (name === "profilePicture") {
-      setFormData({ ...formData, [name]: files[0] });
-    } else {
-      setFormData({ ...formData, [name]: value });
-    }
-    setFormErrors({ ...formErrors, [name]: "" });
-  };
-
-  const validateForm = () => {
+  /*const validateForm = () => {
     const errors = {};
     if (!formData.name) errors.name = "Name is required";
     if (!formData.email) {
@@ -1222,96 +1541,102 @@ const AdminDashboard = () => {
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
-
-  const handleProfileUpdate = async () => {
-    if (!validateForm()) {
-      setMessage({ type: "error", text: "Please fix the errors in the form" });
-      addNotification("Please fix the errors in the form", "error");
-      return;
-    }
-
-    try {
-      const formDataToSend = new FormData();
-      Object.keys(formData).forEach((key) => {
-        if (key === "profilePicture" && formData[key]) {
-          formDataToSend.append(key, formData[key]);
-        } else if (formData[key]) {
-          formDataToSend.append(key, formData[key]);
-        }
-      });
-
-      const res = await apiClient.put("/api/admin/profile", formDataToSend, {
-        headers: {
-          Authorization: `Bearer ${effectiveToken}`,
-          "Content-Type": "multipart/form-data",
-        },
-        timeout: 5000,
-      });
-      setProfile(res.data.profile);
-      setIsEditingProfile(false);
-      setMessage({ type: "success", text: "Profile updated successfully" });
-      addNotification("Profile updated successfully", "success");
-    } catch (error) {
-      const errorMsg = error.response
-        ? `${error.response.status}: ${error.response.data.error || error.response.statusText}`
-        : error.message;
-      setMessage({ type: "error", text: `Failed to update profile: ${errorMsg}` });
-      addNotification(`Failed to update profile: ${errorMsg}`, "error");
-    }
-  };
-
+  */
 
   const handleBulkAction = async (action) => {
   if (selectedLeaves.length === 0) {
     setMessage({ type: "warning", text: "No leaves selected" });
+    setMessageActive(true);
     return;
   }
   const confirm = window.confirm(`Are you sure you want to ${action.toLowerCase()} ${selectedLeaves.length} leave(s)?`);
   if (!confirm) return;
 
+  setIsActionLoading(true);
+  const errors = [];
   try {
-    await Promise.all(selectedLeaves.map((leaveId) =>
-      apiClient.patch(`/api/leaves/admin/leaves/${leaveId}`, {
-        approverRecommendation: action === "Approve" ? "Approved" : "Not Approved",
-        approverDate: new Date().toISOString(),
-        status: action === "Approve" ? "Approved" : "Rejected",
-      }, { headers: { Authorization: `Bearer ${effectiveToken}` } })
-    ));
-    setMessage({ type: "success", text: `${action}ed ${selectedLeaves.length} leaves successfully` });
-    setSelectedLeaves([]);
-    await Promise.all([fetchLeaves(), fetchLeaveEvents()]);
- } catch (error) {
-    const errorMessage = error.response?.data?.error || `Failed to ${action.toLowerCase()} leaves`;
-    setMessage({ type: "error", text: errorMessage });
-    addNotification(errorMessage, "error");
-    if (error.response?.status === 401) {
-      logout();
-      navigate("/login");
-    } else if (error.response?.status === 403) {
-      setMessage({ type: "error", text: "You do not have permission to perform this action" });
-      addNotification("You do not have permission to perform this action", "error");
+    console.log(`handleBulkAction called: action=${action}, selectedLeaves=${selectedLeaves}`);
+
+   const actionMap = {
+      approve: "Approved",
+      reject: "Rejected",
+    };
+    const normalizedAction = actionMap[action.toLowerCase()];
+    if (!normalizedAction) {
+      throw new Error("Invalid action. Must be 'approve' or 'reject'");
     }
+
+    await Promise.all(
+      selectedLeaves.map(async (leaveId) => {
+        try {
+          const leave = [...shortLeaves, ...annualLeaves].find((l) => l._id === leaveId);
+          if (!leave) {
+            throw new Error(`Leave ${leaveId.slice(-6)} not found`);
+          }
+          console.log("Leave state:", { currentApprover: leave.currentApprover, status: leave.status, directorDate: leave.directorDate });
+          if (leave.currentApprover && effectiveUser.role !== leave.currentApprover && effectiveUser.role !== "Admin") {
+            throw new Error(`Leave ${leaveId.slice(-6)}: Not your turn to approve`);
+          }
+          if (effectiveUser.role === "Director" && (leave.directorRecommendation || leave.directorDate)) {
+            throw new Error(`Leave ${leaveId.slice(-6)}: Director has already approved or rejected this leave`);
+          }
+          const response = await apiClient.patch(`/api/leaves/approve/${leaveId}`, {
+            status: normalizedAction,
+            comment: `${normalizedAction.toLowerCase()}ed via bulk action`,
+          });
+          if (response.data?.error) {
+            throw new Error(response.data.error);
+          }
+        } catch (error) {
+          const errorMessage = error.response?.data?.error || error.message || `Failed to ${action.toLowerCase()} leave ${leaveId.slice(-6)}`;
+          console.error(`Error processing leave ${leaveId}:`, errorMessage);
+          errors.push(errorMessage);
+        }
+      })
+    );
+    if (errors.length > 0) {
+      setMessage({ type: "error", text: `Some actions failed: ${errors.join("; ")}` });
+    } else {
+      setMessage({ type: "success", text: `${normalizedAction}ed ${selectedLeaves.length} leaves successfully` });
+    }
+    setSelectedLeaves([]);
+    await Promise.all([fetchLeaves("Short Leave"), fetchLeaves("Annual Leave"), fetchLeaveEvents()]);
+  } catch (error) {
+    console.error("Unexpected error in handleBulkAction:", error);
+    setMessage({ type: "error", text: "An unexpected error occurred during bulk action" });
+  } finally {
+    setIsActionLoading(false);
+    setMessageActive(true);
   }
 };
 
-const handleSort = (column) => {
-  setSortColumn(column);
-  setSortDirection(sortColumn === column && sortDirection === "asc" ? "desc" : "asc");
-};
+  const handleSort = (column) => {
+    setSortColumn(column);
+    setSortDirection(sortColumn === column && sortDirection === "asc" ? "desc" : "asc");
+  };
 
-const handleEditClick = (leave) => {
-  // Implement edit logic (e.g., open edit modal)
-  console.log("Edit:", leave);
-};
+  const handleEditClick = (leave) => {
+    console.log("Edit:", leave);
+  };
 
-const handleDeleteClick = (leaveId) => {
-  // Implement delete logic with confirmation
-  const confirm = window.confirm("Are you sure you want to delete this leave?");
-  if (confirm) {
-    // Call API to delete
-    console.log("Delete:", leaveId);
-  }
-};
+   const handleDeleteClick = async (leaveId) => {
+    const confirm = window.confirm("Are you sure you want to delete this leave?");
+    if (confirm) {
+      try {
+        await apiClient.delete(`/api/leaves/approve/${leaveId}`, {
+          headers: { Authorization: `Bearer ${effectiveToken}` },
+        });
+        setMessage({ type: "success", text: "Leave deleted successfully" });
+        addNotification("Leave deleted successfully", "success");
+        await Promise.all([fetchLeaves("Short Leave"), fetchLeaves("Annual Leave"), fetchLeaveEvents()]);
+      } catch (error) {
+        const errorMessage = error.response?.data?.error || "Failed to delete leave";
+        setMessage({ type: "error", text: errorMessage });
+        addNotification(errorMessage, "error");
+      }
+    }
+  };
+
   const handleSearchChange = (e) => {
     const { name, value } = e.target;
     setSearchParams({ ...searchParams, [name]: value });
@@ -1329,10 +1654,11 @@ const handleDeleteClick = (leaveId) => {
     { label: "Leave Roster", icon: <PeopleIcon /> },
     { label: "Profile", icon: <PersonIcon /> },
     { label: "Calendar", icon: <CalendarTodayIcon /> },
+    { label: "Audit Logs", icon: <AssessmentIcon /> },
     { label: "Logout", icon: <LogoutIcon /> },
   ];
 
-  if (isLoading) {
+  if (isLoading  || !isAuthReady) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
         <CircularProgress />
@@ -1381,50 +1707,119 @@ const handleDeleteClick = (leaveId) => {
         </List>
       </StyledDrawer>
 
-      <MainContent>
-        <Paper elevation={3} sx={{ p: 4, height: "100%", width: "100%", borderRadius: 0, boxSizing: "border-box" }}>
-          {message.text && (
-            <Alert severity={message.type} sx={{ mb: 3, borderRadius: 2 }}>
+      <MainContent sx={{ height: "100vh", overflowY: "auto" }}>
+        <Paper elevation={3} sx={{ p: 6, minHeight: "100%", width: "100%", borderRadius: 0, boxSizing: "border-box", bgcolor: "#fafafa" }}>
+          {messageActive && (
+            <Alert severity={message.type} sx={{ mb: 6, borderRadius: 2 }}>
               {message.text}
             </Alert>
           )}
 
           {activeSection === "Leave Analytics" && (
             <>
-              <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold", fontFamily: "'Roboto', sans-serif", color: "#333" }}>
+              <Typography
+                variant="h5"
+                sx={{
+                  fontWeight: 700,
+                  mb: 2,
+                  color: "#2d3748",
+                  fontFamily: "'Roboto', sans-serif",
+                }}
+              >
                 Leave Analytics
               </Typography>
-              <Divider sx={{ mb: 4 }} />
-              {/* Enhanced Stats Section */}
-              <Grid container spacing={3} sx={{ mb: 5 }}>
+              <Divider sx={{ mb: 4, borderColor: "#e0e0e0" }} />
+
+              <Grid container spacing={3} sx={{ mb: 6 }}>
                 <Grid item xs={12} sm={3}>
-                  <StyledStatsCard elevation={2} sx={{ bgcolor: "#e0e0e0" }}>
-                    <Typography variant="h6" sx={{ fontWeight: "medium", color: "#555" }}>Total Leaves</Typography>
-                    <Typography variant="h4" sx={{ color: "#333" }}>{stats.total}</Typography>
+                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#e0f7fa", borderRadius: 2, p: 2 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
+                      Total Leaves
+                    </Typography>
+                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
+                      {statusCounts.Total.total}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#718096" }}>
+                      Annual: {statusCounts.Total.Annual} | Short: {statusCounts.Total.Short}
+                    </Typography>
                   </StyledStatsCard>
                 </Grid>
                 <Grid item xs={12} sm={3}>
-                  <StyledStatsCard elevation={2} sx={{ bgcolor: "#c8e6c9" }}>
-                    <Typography variant="h6" sx={{ fontWeight: "medium", color: "#555" }}>Approved</Typography>
-                    <Typography variant="h4" sx={{ color: "#333" }}>{stats.approved}</Typography>
+                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#d4edda", borderRadius: 2, p: 2 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
+                      Approved
+                    </Typography>
+                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
+                      {statusCounts.Approved.total}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#718096" }}>
+                      Annual: {statusCounts.Approved.Annual} | Short: {statusCounts.Approved.Short}
+                    </Typography>
                   </StyledStatsCard>
                 </Grid>
                 <Grid item xs={12} sm={3}>
-                  <StyledStatsCard elevation={2} sx={{ bgcolor: "#ffcdd2" }}>
-                    <Typography variant="h6" sx={{ fontWeight: "medium", color: "#555" }}>Rejected</Typography>
-                    <Typography variant="h4" sx={{ color: "#333" }}>{stats.rejected}</Typography>
+                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#f8d7da", borderRadius: 2, p: 2 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
+                      Rejected
+                    </Typography>
+                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
+                      {statusCounts.Rejected.total}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#718096" }}>
+                      Annual: {statusCounts.Rejected.Annual} | Short: {statusCounts.Rejected.Short}
+                    </Typography>
                   </StyledStatsCard>
                 </Grid>
                 <Grid item xs={12} sm={3}>
-                  <StyledStatsCard elevation={2} sx={{ bgcolor: "#ffe082" }}>
-                    <Typography variant="h6" sx={{ fontWeight: "medium", color: "#555" }}>Pending</Typography>
-                    <Typography variant="h4" sx={{ color: "#333" }}>{stats.pending}</Typography>
+                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#fff3cd", borderRadius: 2, p: 2 }}>
+                    <Typography variant="h6"sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
+                      Pending
+                    </Typography>
+                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
+                      {statusCounts.Pending.total}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#718096" }}>
+                      Annual: {statusCounts.Pending.Annual} | Short: {statusCounts.Pending.Short}
+                    </Typography>
+                  </StyledStatsCard>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#e6e6fa", borderRadius: 2, p: 2 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
+                      Recommended by Director
+                    </Typography>
+                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
+                      {statusCounts.RecommendedByDirector.total}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#718096" }}>
+                      Annual: {statusCounts.RecommendedByDirector.Annual} | Short: {statusCounts.RecommendedByDirector.Short}
+                    </Typography>
+                  </StyledStatsCard>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#f0e68c", borderRadius: 2, p: 2 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
+                      Recommended by Departmental
+                    </Typography>
+                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
+                      {statusCounts.RecommendedByDepartmental.total}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: "#718096" }}>
+                      Annual: {statusCounts.RecommendedByDepartmental.Annual} | Short: {statusCounts.RecommendedByDepartmental.Short}
+                    </Typography>
                   </StyledStatsCard>
                 </Grid>
               </Grid>
 
-              {/* Search Leaves Section */}
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: "medium", color: "#333" }}>
+              <Typography
+                variant="h6"
+                sx={{
+                  mb: 3,
+                  fontWeight: 600,
+                  color: "#2d3748",
+                  fontFamily: "'Roboto', sans-serif",
+                }}
+              >
                 Search Leaves
               </Typography>
               <Box sx={{ mb: 4 }}>
@@ -1439,6 +1834,14 @@ const handleDeleteClick = (leaveId) => {
                       select
                       SelectProps={{ native: true }}
                       variant="outlined"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: 2,
+                          "& fieldset": { borderColor: "#e0e0e0" },
+                          "&:hover fieldset": { borderColor: "#b0bec5" },
+                        },
+                        "& .MuiInputLabel-root": { color: "#4a5568" },
+                      }}
                     >
                       <option value="">Select Employee</option>
                       {users.map((user) => (
@@ -1458,6 +1861,14 @@ const handleDeleteClick = (leaveId) => {
                       select
                       SelectProps={{ native: true }}
                       variant="outlined"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: 2,
+                          "& fieldset": { borderColor: "#e0e0e0" },
+                          "&:hover fieldset": { borderColor: "#b0bec5" },
+                        },
+                        "& .MuiInputLabel-root": { color: "#4a5568" },
+                      }}
                     >
                       <option value="">All</option>
                       <option value="Short Leave">Short Leave</option>
@@ -1474,81 +1885,308 @@ const handleDeleteClick = (leaveId) => {
                       select
                       SelectProps={{ native: true }}
                       variant="outlined"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: 2,
+                          "& fieldset": { borderColor: "#e0e0e0" },
+                          "&:hover fieldset": { borderColor: "#b0bec5" },
+                        },
+                        "& .MuiInputLabel-root": { color: "#4a5568" },
+                      }}
                     >
                       <option value="">All</option>
                       <option value="Pending">Pending</option>
                       <option value="Approved">Approved</option>
                       <option value="Rejected">Rejected</option>
-                      <option value="RecommendedBySectional">Recommended by Sectional</option>
+                      <option value="RecommendedByDirector">Recommended by Director</option>
                       <option value="RecommendedByDepartmental">Recommended by Departmental</option>
                     </TextField>
                   </Grid>
                   <Grid item xs={12} sm={2}>
-                    <StyledButton
+                    <Button
                       variant="contained"
                       color="primary"
                       onClick={handleSearch}
                       startIcon={<SearchIcon />}
                       fullWidth
+                      sx={{
+                        borderRadius: 2,
+                        bgcolor: "#1976d2",
+                        "&:hover": { bgcolor: "#1565c0" },
+                        textTransform: "none",
+                        fontWeight: 500,
+                      }}
                     >
                       Search
-                    </StyledButton>
+                    </Button>
                   </Grid>
                 </Grid>
               </Box>
 
-              {/* Search Results Table */}
-              <TableContainer sx={{ maxHeight: "40vh", overflow: "auto" }}>
+              <TableContainer
+                sx={{
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
+                  borderRadius: 2,
+                  border: "1px solid #e0e0e0",
+                  bgcolor: "#fff",
+                }}
+              >
                 <Table stickyHeader sx={{ width: "100%", tableLayout: "auto" }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>ID</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Employee</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Type</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Days</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Start Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>End Date</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: "bold", bgcolor: "#f5f5f5", whiteSpace: "nowrap" }}>Details</TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: "#f7fafc",
+                          color: "#2d3748",
+                          borderBottom: "2px solid #e0e0e0",
+                          whiteSpace: "nowrap",
+                          px: 3,
+                          py: 2,
+                        }}
+                      >
+                        ID
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: "#f7fafc",
+                          color: "#2d3748",
+                          borderBottom: "2px solid #e0e0e0",
+                          whiteSpace: "nowrap",
+                          px: 3,
+                          py: 2,
+                        }}
+                      >
+                        Employee
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: "#f7fafc",
+                          color: "#2d3748",
+                          borderBottom: "2px solid #e0e0e0",
+                          whiteSpace: "nowrap",
+                          px: 3,
+                          py: 2,
+                        }}
+                      >
+                        Type
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: "#f7fafc",
+                          color: "#2d3748",
+                          borderBottom: "2px solid #e0e0e0",
+                          whiteSpace: "nowrap",
+                          px: 3,
+                          py: 2,
+                        }}
+                      >
+                        Days
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: "#f7fafc",
+                          color: "#2d3748",
+                          borderBottom: "2px solid #e0e0e0",
+                          whiteSpace: "nowrap",
+                          px: 3,
+                          py: 2,
+                        }}
+                      >
+                        Start Date
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: "#f7fafc",
+                          color: "#2d3748",
+                          borderBottom: "2px solid #e0e0e0",
+                          whiteSpace: "nowrap",
+                          px: 3,
+                          py: 2,
+                        }}
+                      >
+                        End Date
+                      </TableCell>
+                      <TableCell
+                        sx={{
+                          fontWeight: 700,
+                          bgcolor: "#f7fafc",
+                          color: "#2d3748",
+                          borderBottom: "2px solid #e0e0e0",
+                          whiteSpace: "nowrap",
+                          px: 3,
+                          py: 2,
+                        }}
+                      >
+                        Status
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {leaves.length > 0 ? (
                       leaves.map((leave) => (
-                        <TableRow
-                          key={leave._id}
-                          hover
-                          sx={{
-                            "&:hover": { bgcolor: "#f0f0f0" },
-                            bgcolor: isActiveLeave(leave) ? "#e0f7fa" : "inherit",
-                          }}
-                        >
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave._id.slice(-6)}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.employeeName}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.leaveType}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{leave.daysApplied}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.startDate).toLocaleDateString()}</TableCell>
-                          <TableCell sx={{ whiteSpace: "nowrap" }}>{new Date(leave.endDate).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <Tooltip title={leave.status}>
-                              {getStatusChip(leave)}
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              onClick={() => handleViewDetails(leave)}
-                              variant="outlined"
-                              size="small"
-                              sx={{ borderRadius: 1 }}
-                            >
-                              View
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                        <>
+                          <TableRow
+                            key={leave._id}
+                            hover
+                            onClick={() => setExpandedLeaveId(expandedLeaveId === leave._id ? null : leave._id)}
+                            sx={{
+                              "&:hover": { bgcolor: "#edf2f7" },
+                              bgcolor: isActiveLeave(leave) ? "#e6fffa" : "inherit",
+                              cursor: "pointer",
+                              borderBottom: "1px solid #e0e0e0",
+                            }}
+                          >
+                            <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
+                              {leave._id.slice(-6)}
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
+                              {leave.employeeName}
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
+                              {leave.leaveType}
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
+                              {leave.daysApplied}
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
+                              {new Date(leave.startDate).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap", px: 3, py: 2, color: "#4a5568" }}>
+                              {new Date(leave.endDate).toLocaleDateString()}
+                            </TableCell>
+                            <TableCell sx={{ px: 3, py: 2, display: "flex", alignItems: "center", gap: 1 }}>
+                              <Tooltip title={leave.status}>
+                                {getStatusChip(leave)}
+                              </Tooltip>
+                              {expandedLeaveId === leave._id ? (
+                                <ExpandLessIcon sx={{ color: "#718096" }} />
+                              ) : (
+                                <ExpandMoreIcon sx={{ color: "#718096" }} />
+                              )}
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell colSpan={7} sx={{ padding: 0 }}>
+                              <Collapse in={expandedLeaveId === leave._id} timeout="auto" unmountOnExit>
+                                <Box
+                                  sx={{
+                                    p: 3,
+                                    bgcolor: "linear-gradient(145deg, #f7fafc, #edf2f7)",
+                                    border: "1px solid #e2e8f0",
+                                    borderRadius: 2,
+                                    mx: 2,
+                                    mb: 2,
+                                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.03)",
+                                  }}
+                                >
+                                  <Typography
+                                    variant="h6"
+                                    gutterBottom
+                                    sx={{ fontWeight: 600, color: "#2d3748", mb: 3 }}
+                                  >
+                                    Leave Details
+                                  </Typography>
+                                  <Box sx={{ mb: 3 }}>
+                                    <Typography
+                                      variant="subtitle1"
+                                      sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}
+                                    >
+                                      Employee Information
+                                    </Typography>
+                                    <Grid container spacing={3}>
+                                      <Grid item xs={12} sm={6}>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>ID:</strong> {leave._id}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Employee:</strong> {leave.employeeName}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Person Number:</strong> {leave.personNumber || "N/A"}
+                                        </Typography>
+                                      </Grid>
+                                      <Grid item xs={12} sm={6}>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Department:</strong> {leave.department || "N/A"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Directorate:</strong> {leave.directorate || "N/A"}
+                                        </Typography>
+                                      </Grid>
+                                    </Grid>
+                                  </Box>
+                                  <Box sx={{ mb: 3 }}>
+                                    <Typography
+                                      variant="subtitle1"
+                                      sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}
+                                    >
+                                      Leave Details
+                                    </Typography>
+                                    <Grid container spacing={3}>
+                                      <Grid item xs={12} sm={6}>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Days Applied:</strong> {leave.daysApplied}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Start Date:</strong>{" "}
+                                          {new Date(leave.startDate).toLocaleDateString()}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>End Date:</strong>{" "}
+                                          {new Date(leave.endDate).toLocaleDateString()}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Reason:</strong> {leave.reason || "N/A"}
+                                        </Typography>
+                                      </Grid>
+                                      <Grid item xs={12} sm={6}>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Address While Away:</strong>{" "}
+                                          {leave.addressWhileAway || "N/A"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Email:</strong> {leave.emailAddress || "N/A"}
+                                        </Typography>
+                                        <Typography sx={{ color: "#718096", mb: 1 }}>
+                                          <strong>Phone:</strong> {leave.phoneNumber || "N/A"}
+                                        </Typography>
+                                      </Grid>
+                                    </Grid>
+                                  </Box>
+                                  {(effectiveUser.role === "HRDirector" || effectiveUser.role === "Admin") && (
+                                    <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 3 }}>
+                                      <Button
+                                        variant="contained"
+                                        color="error"
+                                        onClick={() => handleDeleteClick(leave._id)}
+                                        sx={{
+                                          borderRadius: 2,
+                                          textTransform: "none",
+                                          fontWeight: 500,
+                                          bgcolor: "#e53e3e",
+                                          "&:hover": { bgcolor: "#c53030" },
+                                          px: 3,
+                                        }}
+                                      >
+                                        Delete
+                                      </Button>
+                                    </Box>
+                                  )}
+                                </Box>
+                              </Collapse>
+                            </TableCell>
+                          </TableRow>
+                        </>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={8} align="center">
+                        <TableCell colSpan={7} align="center" sx={{ py: 4, color: "#718096", fontStyle: "italic" }}>
                           No leaves found
                         </TableCell>
                       </TableRow>
@@ -1559,114 +2197,108 @@ const handleDeleteClick = (leaveId) => {
             </>
           )}
 
-          
+          {activeSection === "Short Leave Requests" && (
+            <LeaveTable
+              leaves={shortLeaves}
+              isShortLeave={true}
+              userRole={effectiveUser.role}
+              showPendingActionsOnly={showPendingActionsOnly}
+              setShowPendingActionsOnly={setShowPendingActionsOnly}
+              handleAction={handleAction}
+              selectedLeaves={selectedLeaves}
+              setSelectedLeaves={setSelectedLeaves}
+              handleBulkAction={handleBulkAction}
+              specificRoleFilter={specificRoleFilter}
+              setSpecificRoleFilter={setSpecificRoleFilter}
+              filterParams={filterParams}
+              setFilterParams={setFilterParams}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              handleSort={handleSort}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              rowsPerPage={rowsPerPage}
+              isActiveLeave={isActiveLeave}
+              getStatusChip={getStatusChip}
+              handleEditClick={handleEditClick}
+              handleDeleteClick={handleDeleteClick}
+              directorates={directorates}
+              departments={departments}
+              socket={socket}
+            />
+          )}
 
-  {activeSection === "Short Leave Requests" && (
-    <LeaveTable
-      leaves={shortLeaves}
-      isShortLeave={true}
-      userRole={effectiveUser.role}
-      showPendingActionsOnly={showPendingActionsOnly}
-      setShowPendingActionsOnly={setShowPendingActionsOnly}
-      handleAction={handleAction}
-      handleViewDetails={handleViewDetails}
-      selectedLeaves={selectedLeaves}
-      setSelectedLeaves={setSelectedLeaves}
-      handleBulkAction={handleBulkAction}
-      specificRoleFilter={specificRoleFilter}
-      setSpecificRoleFilter={setSpecificRoleFilter}
-      filterParams={filterParams}
-      setFilterParams={setFilterParams}
-      sortColumn={sortColumn}
-      sortDirection={sortDirection}
-      handleSort={handleSort}
-      currentPage={currentPage}
-      setCurrentPage={setCurrentPage}
-      rowsPerPage={rowsPerPage}
-      isActiveLeave={isActiveLeave}
-      getStatusChip={getStatusChip}
-      handleEditClick={handleEditClick}    
-      handleDeleteClick={handleDeleteClick}
-    />
-  )}
+          {activeSection === "Annual Leave Requests" && (
+            <LeaveTable
+              leaves={annualLeaves}
+              isShortLeave={false}
+              userRole={effectiveUser.role}
+              showPendingActionsOnly={showPendingActionsOnly}
+              setShowPendingActionsOnly={setShowPendingActionsOnly}
+              handleAction={handleAction}
+              selectedLeaves={selectedLeaves}
+              setSelectedLeaves={setSelectedLeaves}
+              handleBulkAction={handleBulkAction}
+              specificRoleFilter={specificRoleFilter}
+              setSpecificRoleFilter={setSpecificRoleFilter}
+              filterParams={filterParams}
+              setFilterParams={setFilterParams}
+              sortColumn={sortColumn}
+              sortDirection={sortDirection}
+              handleSort={handleSort}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              rowsPerPage={rowsPerPage}
+              isActiveLeave={isActiveLeave}
+              getStatusChip={getStatusChip}
+              handleEditClick={handleEditClick}
+              handleDeleteClick={handleDeleteClick}
+              directorates={directorates}
+              departments={departments}
+              socket={socket}
+            />
+          )}
 
-  {activeSection === "Annual Leave Requests" && (
-    <LeaveTable
-      leaves={annualLeaves}
-      isShortLeave={false}
-      userRole={effectiveUser.role}
-      showPendingActionsOnly={showPendingActionsOnly}
-      setShowPendingActionsOnly={setShowPendingActionsOnly}
-      handleAction={handleAction}
-      handleViewDetails={handleViewDetails}
-      selectedLeaves={selectedLeaves}
-      setSelectedLeaves={setSelectedLeaves}
-      handleBulkAction={handleBulkAction}
-      specificRoleFilter={specificRoleFilter}
-      setSpecificRoleFilter={setSpecificRoleFilter}
-      filterParams={filterParams}
-      setFilterParams={setFilterParams}
-      sortColumn={sortColumn}
-      sortDirection={sortDirection}
-      handleSort={handleSort}
-      currentPage={currentPage}
-      setCurrentPage={setCurrentPage}
-      rowsPerPage={rowsPerPage}
-      isActiveLeave={isActiveLeave}
-      getStatusChip={getStatusChip}
-      handleEditClick={handleEditClick}    
-      handleDeleteClick={handleDeleteClick}
-    />
-  )}
-
-  
-
- {activeSection === "Approval Workflow" && (
-  <>
-    <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-      Approval Workflow
-    </Typography>
-    <Divider sx={{ mb: 3 }} />
-    <LeaveTable
-      leaves={[...shortLeaves, ...annualLeaves]}
-      isShortLeave={false} // Can be adjusted based on context
-      userRole={effectiveUser.role}
-      showPendingActionsOnly={showPendingActionsOnly}
-      setShowPendingActionsOnly={setShowPendingActionsOnly}
-      handleAction={handleAction}
-      handleViewDetails={handleViewDetails}
-      selectedLeaves={selectedLeaves}
-      setSelectedLeaves={setSelectedLeaves}
-      handleBulkAction={handleBulkAction}
-      specificRoleFilter={specificRoleFilter}
-      setSpecificRoleFilter={setSpecificRoleFilter}
-      filterParams={filterParams}
-      setFilterParams={setFilterParams}
-      sortColumn={sortColumn}
-      sortDirection={sortDirection}
-      handleSort={handleSort}
-      currentPage={currentPage}
-      setCurrentPage={setCurrentPage}
-      rowsPerPage={rowsPerPage}
-      isActiveLeave={isActiveLeave}
-      getStatusChip={getStatusChip}
-      handleEditClick={handleEditClick}    
-      handleDeleteClick={handleDeleteClick}
-
-    />
-  </>
-)}
-
-          {activeSection === "Leave Roster" && (
+          {activeSection === "Approval Workflow" && (
             <>
               <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
-                Leave Roster
+                Approval Workflow
               </Typography>
               <Divider sx={{ mb: 3 }} />
-              <LeaveRoster />
+              <LeaveTable
+                leaves={[...shortLeaves, ...annualLeaves]}
+                isShortLeave={false}
+                userRole={effectiveUser.role}
+                showPendingActionsOnly={showPendingActionsOnly}
+                setShowPendingActionsOnly={setShowPendingActionsOnly}
+                handleAction={handleAction}
+                selectedLeaves={selectedLeaves}
+                setSelectedLeaves={setSelectedLeaves}
+                handleBulkAction={handleBulkAction}
+                specificRoleFilter={specificRoleFilter}
+                setSpecificRoleFilter={setSpecificRoleFilter}
+                filterParams={filterParams}
+                setFilterParams={setFilterParams}
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                handleSort={handleSort}
+                currentPage={currentPage}
+                setCurrentPage={setCurrentPage}
+                rowsPerPage={rowsPerPage}
+                isActiveLeave={isActiveLeave}
+                getStatusChip={getStatusChip}
+                handleEditClick={handleEditClick}
+                handleDeleteClick={handleDeleteClick}
+                directorates={directorates}
+                departments={departments}
+              />
             </>
           )}
-         
+        
+          {activeSection === "Leave Roster" && (
+           <AdminLeaveRoster /> 
+          )}
+
           {activeSection === "Profile" && (
             <>
               <Typography variant="h5" sx={{ mb: 3, fontWeight: "bold" }}>
@@ -1677,268 +2309,23 @@ const handleDeleteClick = (leaveId) => {
             </>
           )}
 
-          
-
-    {activeSection === "Calendar" && (
-      <LeaveCalendar
-        calendarError={calendarError}
-        isFetchingEvents={isFetchingEvents}
-        fetchLeaveEvents={fetchLeaveEvents}
-        events={events}
-        setSelectedEvent={setSelectedEvent}
-      />
-    )}
-  </Paper>
-</MainContent>
-
-       
-
-      {/* Leave Details Modal */}
-      <Modal open={!!selectedLeave} onClose={handleCloseModal}>
-        <Box sx={modalStyle}>
-          {selectedLeave && (
-            <>
-              <Typography variant="h5" gutterBottom sx={{ fontWeight: "bold", mb: 3 }}>
-                Leave Details
-              </Typography>
-
-              {/* Employee Information */}
-              <Typography variant="h6" sx={{ fontWeight: "medium", mb: 2 }}>
-                Employee Information
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>ID:</strong> {selectedLeave._id}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Employee:</strong> {selectedLeave.employeeName}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Person Number:</strong> {selectedLeave.personNumber || "N/A"}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Department:</strong> {selectedLeave.department}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Sector:</strong> {selectedLeave.sector || "N/A"}
-                  </Typography>
-                </Grid>
-              </Grid>
-              <Divider sx={{ mb: 3 }} />
-
-              {/* Leave Details */}
-              <Typography variant="h6" sx={{ fontWeight: "medium", mb: 2 }}>
-                Leave Details
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Days Applied:</strong> {selectedLeave.daysApplied}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Start Date:</strong> {new Date(selectedLeave.startDate).toLocaleDateString()}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>End Date:</strong> {new Date(selectedLeave.endDate).toLocaleDateString()}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Reason:</strong> {selectedLeave.reason || "N/A"}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Address While Away:</strong> {selectedLeave.addressWhileAway || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Email:</strong> {selectedLeave.emailAddress || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Phone:</strong> {selectedLeave.phoneNumber || "N/A"}
-                  </Typography>
-                </Grid>
-              </Grid>
-              <Divider sx={{ mb: 3 }} />
-
-              {/* Leave Balance */}
-              <Typography variant="h6" sx={{ fontWeight: "medium", mb: 2 }}>
-                Leave Balance
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Leave Balance BF:</strong> {selectedLeave.leaveBalanceBF || 0}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Current Year Leave:</strong> {selectedLeave.currentYearLeave || 0}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Total Leave Days:</strong> {selectedLeave.totalLeaveDays || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Leave Taken This Year:</strong> {selectedLeave.leaveTakenThisYear || 0}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Leave Balance Due:</strong> {selectedLeave.leaveBalanceDue || "N/A"}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Leave Applied:</strong> {selectedLeave.leaveApplied || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Leave Balance CF:</strong> {selectedLeave.leaveBalanceCF || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Computed By:</strong> {selectedLeave.computedBy || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Computed Date:</strong> {selectedLeave.computedDate ? new Date(selectedLeave.computedDate).toLocaleString() : "N/A"}
-                  </Typography>
-                </Grid>
-              </Grid>
-              <Divider sx={{ mb: 3 }} />
-
-              {/* Approvals */}
-              <Typography variant="h6" sx={{ fontWeight: "medium", mb: 2 }}>
-                Approvals
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Sectional Head:</strong> {selectedLeave.sectionalHeadName || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Sectional Recommendation:</strong>{" "}
-                    {selectedLeave.status === "Approved" || selectedLeave.status === "Rejected"
-                      ? selectedLeave.sectionalHeadRecommendation || "Recommended"
-                      : selectedLeave.sectionalHeadRecommendation || "Pending"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Sectional Date:</strong>{" "}
-                    {selectedLeave.sectionalHeadDate
-                      ? new Date(selectedLeave.sectionalHeadDate).toLocaleString()
-                      : selectedLeave.status === "Approved" || selectedLeave.status === "Rejected"
-                      ? "Set during approval"
-                      : "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Departmental Head:</strong> {selectedLeave.departmentalHeadName || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Departmental Recommendation:</strong>{" "}
-                    {selectedLeave.status === "Approved" || selectedLeave.status === "Rejected"
-                      ? selectedLeave.departmentalHeadRecommendation || "Recommended"
-                      : selectedLeave.departmentalHeadRecommendation || "Pending"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Departmental Date:</strong>{" "}
-                    {selectedLeave.departmentalHeadDate
-                      ? new Date(selectedLeave.departmentalHeadDate).toLocaleString()
-                      : selectedLeave.status === "Approved" || selectedLeave.status === "Rejected"
-                      ? "Set during approval"
-                      : "N/A"}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Days Granted:</strong> {selectedLeave.departmentalHeadDaysGranted || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Effective From:</strong>{" "}
-                    {selectedLeave.departmentalHeadStartDate
-                      ? new Date(selectedLeave.departmentalHeadStartDate).toLocaleDateString()
-                      : "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Last Day:</strong>{" "}
-                    {selectedLeave.departmentalHeadLastDate
-                      ? new Date(selectedLeave.departmentalHeadLastDate).toLocaleDateString()
-                      : "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Resume Date:</strong>{" "}
-                    {selectedLeave.departmentalHeadResumeDate
-                      ? new Date(selectedLeave.departmentalHeadResumeDate).toLocaleDateString()
-                      : "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>HR Director:</strong> {selectedLeave.HRDirectorName || "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>HR Recommendation:</strong>{" "}
-                    {selectedLeave.approverRecommendation || "Pending"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>HR Date:</strong>{" "}
-                    {selectedLeave.approverDate
-                      ? new Date(selectedLeave.approverDate).toLocaleString()
-                      : "N/A"}
-                  </Typography>
-                  <Typography sx={{ mb: 1.5 }}>
-                    <strong>Final Status:</strong> {selectedLeave.status}
-                  </Typography>
-                </Grid>
-              </Grid>
-              <Divider sx={{ mb: 3 }} />
-
-              {/* Workflow Progress Section */}
-              <Typography variant="h6" sx={{ fontWeight: "medium", mb: 2 }}>
-                Workflow Progress
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 4 }}>
-                <Grid item xs={12}>
-                  {selectedLeave.status === "Pending" && (
-                    <Typography sx={{ mb: 1.5, color: "#ff9800" }}>
-                      Leave request submitted, awaiting Sectional Head recommendation.
-                    </Typography>
-                  )}
-                  {(selectedLeave.sectionalHeadRecommendation || selectedLeave.status === "Approved" || selectedLeave.status === "Rejected") && (
-                    <Typography sx={{ mb: 1.5, color: (selectedLeave.sectionalHeadRecommendation || selectedLeave.status === "Approved") === "Recommended" ? "#4caf50" : "#f44336" }}>
-                      Sectional Head {selectedLeave.sectionalHeadRecommendation || "Recommended"} on{" "}
-                      {selectedLeave.sectionalHeadDate
-                        ? new Date(selectedLeave.sectionalHeadDate).toLocaleString()
-                        : "Set during approval"}
-                    </Typography>
-                  )}
-                  {(selectedLeave.departmentalHeadRecommendation || selectedLeave.status === "Approved" || selectedLeave.status === "Rejected") && (
-                    <Typography sx={{ mb: 1.5, color: (selectedLeave.departmentalHeadRecommendation || selectedLeave.status === "Approved") === "Recommended" ? "#4caf50" : "#f44336" }}>
-                      Departmental Head {selectedLeave.departmentalHeadRecommendation || "Recommended"} on{" "}
-                      {selectedLeave.departmentalHeadDate
-                        ? new Date(selectedLeave.departmentalHeadDate).toLocaleString()
-                        : "Set during approval"}
-                    </Typography>
-                  )}
-                  {selectedLeave.approverRecommendation && (
-                    <Typography sx={{ mb: 1.5, color: selectedLeave.approverRecommendation === "Approved" ? "#4caf50" : "#f44336" }}>
-                      HR Director {selectedLeave.approverRecommendation} on{" "}
-                      {new Date(selectedLeave.approverDate).toLocaleString()}
-                    </Typography>
-                  )}
-                  {selectedLeave.status === "Approved" && (
-                    <Typography sx={{ mb: 1.5, color: "#4caf50" }}>
-                      Leave request fully approved.
-                    </Typography>
-                  )}
-                  {selectedLeave.status === "Rejected" && (
-                    <Typography sx={{ mb: 1.5, color: "#f44336" }}>
-                      Leave request rejected.
-                    </Typography>
-                  )}
-                </Grid>
-              </Grid>
-
-              <Button onClick={handleCloseModal} variant="contained" color="primary" fullWidth sx={{ borderRadius: 1 }}>
-                Close
-              </Button>
-            </>
+          {activeSection === "Calendar" && (
+            <LeaveCalendar
+              calendarError={calendarError}
+              isFetchingEvents={isFetchingEvents}
+              fetchLeaveEvents={fetchLeaveEvents}
+              events={events}
+              setSelectedEvent={setSelectedEvent}
+            />
           )}
-        </Box>
-      </Modal>
 
-      {/* Event Details Modal */}
+          {activeSection === "Audit Logs" && (
+           <AuditLogs /> 
+          )}
+
+        </Paper>
+      </MainContent>
+
       <Modal open={!!selectedEvent} onClose={handleCloseEventModal}>
         <Box sx={modalStyle}>
           {selectedEvent && (
