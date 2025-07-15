@@ -29,7 +29,7 @@ router.post("/register", async (req, res) => {
     const newUser = new User({ name, email, password: hashedPassword,  role: "Employee", department: department || "N/A", });
     await newUser.save();
    
-    logAction("Registered user", null, { userId: newUser._id, email, role: "Employee" });
+    //logAction("Registered user", null, { userId: newUser._id, email, role: "Employee" });
     res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
     console.error("Registration error:", error);
@@ -67,7 +67,7 @@ router.post("/admin/login", async (req, res) => {
       process.env.JWT_SECRET || "your_jwt_secret",
       { expiresIn: "1h" }
     );
-     logAction("Admin logged in", user, { userId: user._id, email });
+     //logAction("Admin logged in", user, { userId: user._id, email });
     res.status(200).json({ token, user: { id: user._id, role: user.role, email: user.email } });
   } catch (error) {
     console.error("Error in admin login:", error);
@@ -95,24 +95,59 @@ router.post("/login", async (req, res) => {
       }
     }
     // Generate JWT Token
-    const token = jwt.sign({ id: user._id, role: user.role, directorate }, process.env.JWT_SECRET, { expiresIn: "1h" });
-     logAction("User logged in", user, { userId: user._id, email, role: user.role });
-    res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, directorate, } });
+    const token = jwt.sign({ id: user._id, role: user.role, directorate: user.directorate, department: user.department }, process.env.JWT_SECRET, { expiresIn: "1h" });
+     //logAction("User logged in", user, { userId: user._id, email, role: user.role });
+    res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role, directorate: user.directorate, department: user.department } });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
+router.get('/me', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select(
+      'name role directorate department phoneNumber profilePicture chiefOfficerName personNumber email directorName departmentalHeadName HRDirectorName'
+    );
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({
+      id: user._id.toString(),
+      name: user.name,
+      role: user.role,
+      directorate: user.directorate || 'Unknown',
+      department: user.department || 'Unknown',
+      phoneNumber: user.phoneNumber || '',
+      profilePicture: user.profilePicture || '',
+      chiefOfficerName: user.chiefOfficerName || '',
+      personNumber: user.personNumber || '',
+      email: user.email || '',
+      directorName: user.directorName || '',
+      departmentalHeadName: user.departmentalHeadName || '',
+      HRDirectorName: user.HRDirectorName || '',
+    });
+  } catch (err) {
+    console.error('Fetch user error:', err);
+    res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+
 // PROTECTED ROUTE - ADMIN DASHBOARD
 router.get("/admin-dashboard", verifyToken, hasRole(["Director", "DepartmentalHead", "HRDirector", "Admin"]), (req, res) => {
-  logAction("Accessed admin dashboard", req.user, {});
+  //logAction("Accessed admin dashboard", req.user, {});
   res.json({ msg: "Welcome to Admin Dashboard!" });
 });
 
 // PROTECTED ROUTE - EMPLOYEE DASHBOARD
 router.get("/employee-dashboard", verifyToken, (req, res) => {
-  logAction("Accessed employee dashboard", req.user, {});
+  //logAction("Accessed employee dashboard", req.user, {});
   res.json({ msg: "Welcome to Employee Dashboard!" });
 });
 

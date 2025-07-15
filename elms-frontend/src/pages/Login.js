@@ -1,6 +1,7 @@
 import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "../context/AuthContext";
-import { TextField, Button, Container, Typography, Paper } from "@mui/material";
+import { TextField, Button, Container, Typography, Paper, Checkbox, FormControlLabel, InputAdornment, CircularProgress } from "@mui/material";
+import { Email as EmailIcon, Lock as LockIcon } from '@mui/icons-material';
 import { useNavigate } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 
@@ -47,9 +48,19 @@ const Login = () => {
   }, [authData, navigate]);
 
   return (
-    <Container maxWidth="xs" className="flex items-center justify-center h-screen">
-      <Paper className="p-6 shadow-lg">
-        <Typography variant="h5" className="mb-4">Login</Typography>
+    <Container maxWidth="md" className="flex items-center justify-center h-screen">
+       <Paper className="p-10 shadow-lg">
+        <img 
+          src="/nyeri logo.jpg" 
+          alt="Nyeri County Logo" 
+          style={{ width: '100px', height: 'auto', margin: '0 auto 1rem', display: 'block' }} 
+        />
+        <div style={{ textAlign: 'center' }}>
+          <Typography variant="h4" className="mb-4" style={{ marginBottom: '2rem' }}>
+            Nyeri County Leave Management System
+          </Typography>
+        </div>
+
 
         {error && <Typography color="error">{error}</Typography>}
         
@@ -61,6 +72,13 @@ const Login = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={isLoading}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <EmailIcon />
+                </InputAdornment>
+              ),
+            }}
           />
           <TextField
             label="Password"
@@ -70,13 +88,25 @@ const Login = () => {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             disabled={isLoading}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <LockIcon />
+                </InputAdornment>
+              ),
+            }}
           />
-          <Button
+          <FormControlLabel
+            control={<Checkbox />}
+            label="Remember me"
+          />
+           <Button
             type="submit"
             variant="contained"
             color="primary"
-            fullWidth
             disabled={isLoading}
+            startIcon={isLoading ? <CircularProgress size={24} color="inherit" /> : null}
+            style={{ width: '50%', alignSelf: 'center' }}
           >
             {isLoading ? "Logging in..." : "Login"}
           </Button>

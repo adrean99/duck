@@ -184,7 +184,7 @@ router.patch("/leaves/:id", verifyToken, hasRole(["Director", "DepartmentalHead"
     Object.assign(leave, filteredUpdates);
     await leave.save();
 
-    logAction("Updated leave status", req.user, { leaveId, updates: filteredUpdates });
+    // logAction("Updated leave status", req.user, { leaveId, updates: filteredUpdates });
     res.status(200).json(leave);
   } catch (error) {
     console.error("Error updating leave:", error);

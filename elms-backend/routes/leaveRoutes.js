@@ -125,7 +125,7 @@ router.post("/apply", verifyToken, async (req, res) => {
 
     const adminEmail = (await User.findOne({ role: "Admin" }))?.email || "admin@example.com";
     await sendEmail(adminEmail, "New Leave Request", `New ${leave.leaveType} request from ${leave.employeeName}.`);
-    logAction("Applied for leave", req.user, { leaveId: leave._id, leaveType, daysApplied, startDate, endDate });
+    //logAction("Applied for leave", req.user, { leaveId: leave._id, leaveType, daysApplied, startDate, endDate });
     res.status(201).json({ message: "Leave request submitted", leave });
   } catch (error) {
     console.error("Error applying for leave:", error);
@@ -167,7 +167,7 @@ router.get(
       } else {
         return res.status(400).json({ error: "Invalid leave type" });
       }
-      logAction("Viewed admin leaves", req.user, { leaveType, directorate: user.directorate, department: user.department });
+      //logAction("Viewed admin leaves", req.user, { leaveType, directorate: user.directorate, department: user.department });
       res.status(200).json(leaveRequests);
     } catch (error) {
       console.error("Error fetching admin leaves:", error);
@@ -298,7 +298,7 @@ router.patch("/approve/:id", verifyToken, hasRole(["Director", "DepartmentalHead
       });
     }
 
-    logAction("Approved/Rejected leave", req.user, { leaveId: leave._id, leaveType: leave.leaveType, status, comment });
+   //logAction("Approved/Rejected leave", req.user, { leaveId: leave._id, leaveType: leave.leaveType, status, comment });
     res.status(200).json({ message: "Leave status updated", leave });
   } catch (error) {
     console.error("Error updating leave:", error);
@@ -464,7 +464,7 @@ router.get("/my-leaves", verifyToken, async (req, res) => {
     }
 
     console.log("Leave requests for user:", req.user.id, leaveRequests);
-     logAction("Viewed my leave requests", req.user, { leaveType });
+     //logAction("Viewed my leave requests", req.user, { leaveType });
     res.status(200).json(leaveRequests);
   } catch (error) {
     console.error("Error fetching leave requests:", error);
@@ -664,7 +664,7 @@ router.patch("/admin/leaves/:id", verifyToken, hasRole(["Director", "Departmenta
     await leave.save();
 
     console.log("Leave updated:", leave);
- logAction("Updated leave details", req.user, { leaveId: leave._id, updates: filteredUpdates });
+ //logAction("Updated leave details", req.user, { leaveId: leave._id, updates: filteredUpdates });
     res.status(200).json({ message: "Leave updated successfully", leave });
   } catch (error) {
     console.error("Error updating leave:", error);
@@ -741,8 +741,8 @@ router.get("/approved", verifyToken, async (req, res) => {
     // Map leave types
     const mapLeaveType = (leaveType) => {
       const typeMap = {
-        "Short Leave": "Vacation Leave",
-        "Annual Leave": "Vacation Leave",
+        "Short Leave": "Short Leave",
+        "Annual Leave": "Annual Leave",
         "Emergency Leave": "Compassionate Leave",
         "Maternity Leave": "Maternity or Paternity",
         "Terminal": "Terminal Leave",
@@ -967,7 +967,7 @@ router.put(
         "Leave Status Update",
         `Your ${leave.leaveType} request has been updated. Status: ${leave.status}.`
       );
-        logAction("Updated annual leave", req.user, { leaveId: leave._id, role, action, date });
+        //logAction("Updated annual leave", req.user, { leaveId: leave._id, role, action, date });
       res.status(200).json({ message: "Leave request updated", leave });
     } catch (error) {
       console.error("Error updating annual leave:", error);
@@ -1029,7 +1029,7 @@ router.post('/bulk-action', async (req, res) => {
       { _id: { $in: leaveIds } },
       { status }
     );
-    logAction("Performed bulk leave action", req.user, { leaveIds, action, status });
+    //logAction("Performed bulk leave action", req.user, { leaveIds, action, status });
     res.json({ message: `Leaves ${action.toLowerCase()}d successfully` });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });

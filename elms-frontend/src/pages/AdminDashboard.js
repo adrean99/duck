@@ -1650,9 +1650,9 @@ const AdminDashboard = () => {
     { label: "Leave Analytics", icon: <BarChartIcon /> },
     { label: "Short Leave Requests", icon: <ListAltIcon /> },
     { label: "Annual Leave Requests", icon: <ListAltIcon /> },
-    { label: "Approval Workflow", icon: <SettingsIcon /> },
+    //{ label: "Approval Workflow", icon: <SettingsIcon /> },
     { label: "Leave Roster", icon: <PeopleIcon /> },
-    { label: "Profile", icon: <PersonIcon /> },
+    //{ label: "Profile", icon: <PersonIcon /> },
     { label: "Calendar", icon: <CalendarTodayIcon /> },
     { label: "Audit Logs", icon: <AssessmentIcon /> },
     { label: "Logout", icon: <LogoutIcon /> },
@@ -1783,32 +1783,6 @@ const AdminDashboard = () => {
                     </Typography>
                   </StyledStatsCard>
                 </Grid>
-                <Grid item xs={12} sm={3}>
-                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#e6e6fa", borderRadius: 2, p: 2 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
-                      Recommended by Director
-                    </Typography>
-                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
-                      {statusCounts.RecommendedByDirector.total}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: "#718096" }}>
-                      Annual: {statusCounts.RecommendedByDirector.Annual} | Short: {statusCounts.RecommendedByDirector.Short}
-                    </Typography>
-                  </StyledStatsCard>
-                </Grid>
-                <Grid item xs={12} sm={3}>
-                  <StyledStatsCard elevation={3} sx={{ bgcolor: "#f0e68c", borderRadius: 2, p: 2 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 500, color: "#4a5568", mb: 1 }}>
-                      Recommended by Departmental
-                    </Typography>
-                    <Typography variant="h4" sx={{ color: "#2d3748", fontWeight: 700, mb: 1 }}>
-                      {statusCounts.RecommendedByDepartmental.total}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: "#718096" }}>
-                      Annual: {statusCounts.RecommendedByDepartmental.Annual} | Short: {statusCounts.RecommendedByDepartmental.Short}
-                    </Typography>
-                  </StyledStatsCard>
-                </Grid>
               </Grid>
 
               <Typography
@@ -1898,8 +1872,6 @@ const AdminDashboard = () => {
                       <option value="Pending">Pending</option>
                       <option value="Approved">Approved</option>
                       <option value="Rejected">Rejected</option>
-                      <option value="RecommendedByDirector">Recommended by Director</option>
-                      <option value="RecommendedByDepartmental">Recommended by Departmental</option>
                     </TextField>
                   </Grid>
                   <Grid item xs={12} sm={2}>

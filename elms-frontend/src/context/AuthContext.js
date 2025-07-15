@@ -1,49 +1,101 @@
 import { createContext, useState, useEffect } from "react";
+import apiClient from '../utils/apiClient';
 
-export const AuthContext = createContext();
+export const AuthContext = createContext({
+  user: null,
+  setUser: () => {},
+  token: null,
+  setToken: () => {},
+  isLoading: true,
+  login: () => {},
+  logout: () => {},
+});
 
 export const AuthProvider = ({ children }) => {
-  const [authState, setAuthState] = useState(() => {
-    const token = localStorage.getItem("token");
-    let user = null;
-    try {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) {
-        user = JSON.parse(storedUser);
-      }
-    } catch (error) {
-      console.error("Failed to parse user from localStorage:", error);
-      localStorage.removeItem("user");
-    }
-    return { token: token || null, user };
-  });
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token') || null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  useEffect(() => {
+    const fetchUser = async () => {
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+      try {
+        const response = await apiClient.get('/api/auth/me', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const userData = response.data;
+        if (!userData.id || !userData.name || !userData.directorate) {
+          console.warn('Incomplete user data from /api/auth/me:', userData);
+          setUser({
+            id: userData.id || 'unknown',
+            name: userData.name || 'Unknown User',
+            role: userData.role || 'Employee',
+            directorate: userData.directorate || 'Unknown',
+            department: userData.department || 'Unknown',
+            phoneNumber: userData.phoneNumber || '',
+            profilePicture: userData.profilePicture || '',
+            chiefOfficerName: userData.chiefOfficerName || '',
+            personNumber: userData.personNumber || '',
+            email: userData.email || '',
+            directorName: userData.directorName || '',
+            departmentalHeadName: userData.departmentalHeadName || '',
+            HRDirectorName: userData.HRDirectorName || '',
+          });
+        } else {
+          setUser(userData);
+        }
+        localStorage.setItem('user', JSON.stringify(userData));
+      } catch (err) {
+        console.error('Failed to fetch user:', err.message);
+        setToken(null);
+        setUser(null);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchUser();
+  }, [token]);
 
   const login = (newToken, userData) => {
-    if (!newToken) throw new Error("Token is required for login");
-    const updatedAuthState = { token: newToken, user: userData || null };
-    setAuthState(updatedAuthState);
-    localStorage.setItem("token", newToken);
-    localStorage.setItem("user", JSON.stringify(userData || null));
+    if (!newToken) throw new Error('Token is required for login');
+    if (!userData.id || !userData.name || !userData.directorate) {
+      console.warn('Incomplete user data for login:', userData);
+      userData = {
+        id: userData.id || 'unknown',
+        name: userData.name || 'Unknown User',
+        role: userData.role || 'Employee',
+        directorate: userData.directorate || 'Unknown',
+        department: userData.department || 'Unknown',
+        phoneNumber: userData.phoneNumber || '',
+        profilePicture: userData.profilePicture || '',
+        chiefOfficerName: userData.chiefOfficerName || '',
+        personNumber: userData.personNumber || '',
+        email: userData.email || '',
+        directorName: userData.directorName || '',
+        departmentalHeadName: userData.departmentalHeadName || '',
+        HRDirectorName: userData.HRDirectorName || '',
+      };
+    }
+    setToken(newToken);
+    setUser(userData);
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const logout = () => {
-    setAuthState({ token: null, user: null });
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
   };
 
-  useEffect(() => {
-    setIsAuthReady(true);
-  }, [authState]);
-
-  if (!isAuthReady) {
-    return <div>Loading authentication...</div>;
-  }
-
   return (
-    <AuthContext.Provider value={{ authState, login, logout }}>
+    <AuthContext.Provider value={{ user, setUser, token, setToken, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

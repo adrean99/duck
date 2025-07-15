@@ -53,7 +53,7 @@ router.post('/add-user', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Create new user
-    const user = new User({ email, password: hashedPassword, name, role, department });
+    const user = new User({ email, password: hashedPassword, name, role, directorate, department });
     await user.save();
     
     // Create a corresponding profile
@@ -72,7 +72,7 @@ router.post('/add-user', async (req, res) => {
       profilePicture,
     });
     await profile.save();
-    logAction("Created user", req.user, { userId: user._id, email, role });
+    //logAction("Created user", req.user, { userId: user._id, email, role });
     res.status(201).json({ message: 'User added successfully', userId: user._id });
   } catch (error) {
     console.error('Error adding user:', error);
@@ -125,8 +125,19 @@ router.post("/add-user", verifyToken, hasRole(["Admin"]), async (req, res) => {
 router.get("/users", hasRole(["Admin", "Director", "DepartmentalHead", "HRDirector"]), async (req, res) => {
   console.log("Authenticated user:", req.user);
   try {
-    const users = await User.find({ role: { $ne: "Admin" } }); // Exclude Admins
-    res.status(200).json(users);
+    const users = await User.find({ role: { $ne: "Admin" } }).select("-password");
+    const enrichedUsers = await Promise.all(
+      users.map(async (user) => {
+        const profile = await Profile.findOne({ userId: user._id });
+        if (!profile) console.warn(`No profile found for user ${user._id}`);
+        return {
+          ...user.toObject(),
+          directorate: profile ? profile.directorate : null,
+        };
+      })
+    );
+    console.log("Enriched users:", enrichedUsers);
+    res.status(200).json(enrichedUsers);
   } catch (error) {
     console.error("Error fetching users:", error);
     res.status(500).json({ error: "Server error", details: error.message });
@@ -166,7 +177,7 @@ router.post('/import-users', async (req, res) => {
             await User.create(user);
           }
         }
-        logAction("Imported users", req.user, { count: users.length });
+        //logAction("Imported users", req.user, { count: users.length });
         res.status(201).json({ message: 'Users imported successfully' });
       });
   } catch (error) {
@@ -185,7 +196,7 @@ router.post('/change-password/:userId', async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
-    logAction("Changed user password", req.user, { userId });
+    //logAction("Changed user password", req.user, { userId });
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -211,7 +222,7 @@ router.put('/:userId', async (req, res) => {
       const newProfile = new Profile({ userId, ...updates });
       await newProfile.save();
     }
-    logAction("Updated user profile", req.user, { userId, updates });
+    //logAction("Updated user profile", req.user, { userId, updates });
     res.json({ message: 'Profile updated successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
@@ -226,7 +237,7 @@ router.delete('/:userId', async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-     logAction("Deleted user", req.user, { userId });
+     //logAction("Deleted user", req.user, { userId });
      await Profile.deleteOne({ userId });
     res.json({ message: 'User deleted successfully' });
   } catch (error) {

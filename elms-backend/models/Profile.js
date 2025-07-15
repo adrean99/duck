@@ -10,7 +10,7 @@ const profileSchema = new mongoose.Schema({
   chiefOfficerName: { type: String },
   personNumber: { type: String },
   email: { type: String, required: true },
-  directorate: { type: String },
+  directorate: { type: String, required: true },
   directorName: { type: String },
   departmentalHeadName: { type: String },
   HRDirectorName: { type: String},

@@ -7,6 +7,7 @@ const logAction = async (action, user, additionalData = {}) => {
       console.warn(`Cannot log action "${action}": User is undefined or missing _id. Additional data:`, additionalData);
       return; // Exit early if user data is invalid
     }
+    console.log(`Action logged: ${action} by user ${user._id}`, { user, ...additionalData });
 
     const auditLog = new AuditLog({
       action,

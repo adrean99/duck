@@ -31,12 +31,12 @@ const departmentData = {
     "Housing",
     "Survey"
   ],
-  "Department of Finance, Economic Planning and ICT": [
-    "REVENUE MOBILIZATION",
-    "ACCOUNTING SERVICES",
-    "BUDGET AND ECONOMIC PLANNING",
-    "SUPPLY CHAIN MANAGEMENT",
-    "INTERNAL AUDIT",
+  "Department of Finance, Economic Planning &ICT": [
+    "Revenue",
+    "Accounting",
+    "Budget Planning",
+    "Procurement",
+    "Internal Audit",
     "ICT"
   ],
   "Department of Water, Irrigation, Environment and Climate Change": [
